@@ -151,7 +151,9 @@
     <div class="no-cam-icon">📷</div>
     <h2>Camera Required</h2>
     <p>Allow camera access to use AR Navigation. Point your camera at QR codes placed at each building.</p>
-    <button onclick="initCamera()">Try Again</button>
+    <p style="font-size:12px;color:#64748b;margin-bottom:16px" id="no-cam-reason"></p>
+    <button onclick="initCamera()" style="margin-bottom:10px">Try Again</button>
+    <button onclick="openInBrowser()" style="background:transparent;border:1.5px solid rgba(255,255,255,.3);color:#94a3b8;padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Open in Chrome / Safari</button>
   </div>
 
   <!-- GPS dot -->
@@ -365,6 +367,30 @@ async function initCamera() {
     console.error('Camera init failed:', e);
     loading.classList.add('hidden');
     noCam.style.display = 'flex';
+    const reason = document.getElementById('no-cam-reason');
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      reason.textContent = 'Camera permission was denied or blocked. Tap "Open in Chrome / Safari" below to open in your full browser.';
+    } else if (e.name === 'NotFoundError') {
+      reason.textContent = 'No camera found on this device.';
+    } else {
+      reason.textContent = 'Camera error: ' + e.message;
+    }
+  }
+}
+
+function openInBrowser() {
+  const url = location.href;
+  // Android: use intent to open in Chrome
+  const ua = navigator.userAgent || '';
+  if (/android/i.test(ua)) {
+    location.href = 'intent://open?url=' + encodeURIComponent(url) + '#Intent;scheme=https;package=com.android.chrome;end';
+    // Fallback: just navigate to URL normally (might still work if Chrome is default)
+    setTimeout(() => { location.href = url; }, 500);
+  } else {
+    // iOS / other: just reload — user can "Open in Safari" from share sheet
+    // Show instructions
+    const reason = document.getElementById('no-cam-reason');
+    reason.innerHTML = '<strong>On iPhone:</strong> Tap the Share button (square+arrow) → "Open in Safari"<br><strong>On Android:</strong> Tap the 3-dot menu → "Open in Chrome"';
   }
 }
 
