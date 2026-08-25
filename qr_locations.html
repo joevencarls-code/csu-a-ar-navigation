@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSU-A AR Navigation — QR Codes</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;color:#1e293b}
+
+  .header{background:linear-gradient(135deg,#1a56db,#1e40af);color:#fff;padding:28px 20px;text-align:center}
+  .header h1{font-size:22px;font-weight:800;margin-bottom:4px}
+  .header p{font-size:12px;opacity:.8;margin-bottom:10px}
+  .header .url-preview{background:rgba(255,255,255,.15);padding:6px 14px;border-radius:8px;font-size:11px;font-family:monospace;display:inline-block;word-break:break-all;max-width:100%}
+
+  .toolbar{padding:12px 20px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center}
+  .toolbar .url-input{display:flex;align-items:center;gap:6px;flex:1;min-width:200px;max-width:480px}
+  .toolbar .url-input label{font-size:11px;font-weight:700;color:#64748b;white-space:nowrap}
+  .toolbar .url-input input{flex:1;padding:7px 10px;border:2px solid #e2e8f0;border-radius:8px;font-size:11px;font-family:monospace}
+  .toolbar .url-input input:focus{outline:none;border-color:#1a56db}
+  .toolbar .actions{display:flex;gap:6px}
+  .toolbar button{padding:7px 14px;border:2px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+  .toolbar button:hover{border-color:#1a56db;color:#1a56db}
+  .toolbar button.active{background:#1a56db;color:#fff;border-color:#1a56db}
+  .toolbar .print-btn{background:#059669;color:#fff;border-color:#059669}
+  .toolbar .print-btn:hover{background:#047857;border-color:#047857}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;padding:20px;max-width:1400px;margin:0 auto}
+
+  .qr-card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);border:1px solid #e2e8f0;transition:transform .2s,box-shadow .2s;page-break-inside:avoid}
+  .qr-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+  .qr-card .card-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9}
+  .qr-card .card-icon{font-size:24px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:#f0f4ff;border-radius:10px;flex-shrink:0}
+  .qr-card .card-info{flex:1;min-width:0}
+  .qr-card .card-info h3{font-size:13px;font-weight:700;color:#111827;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qr-card .card-info .sub{font-size:10px;color:#9ca3af;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qr-card .qr-body{padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .qr-card canvas{border-radius:6px;image-rendering:pixelated}
+  .qr-card .qr-url{font-size:10px;color:var(--blue,#1a56db);font-family:monospace;background:#f0f4ff;padding:3px 8px;border-radius:5px;word-break:break-all;text-align:center;max-width:100%}
+  .qr-card .card-foot{padding:8px 14px;background:#fafbfc;border-top:1px solid #f1f5f9;text-align:center;font-size:10px;color:#9ca3af}
+
+  .summary{padding:16px 20px;text-align:center;color:#6b7280;font-size:12px}
+  .summary strong{color:#111827}
+
+  @media print{
+    body{background:#fff}
+    .header,.toolbar,.summary{display:none!important}
+    .grid{grid-template-columns:repeat(2,1fr);gap:10px;padding:10px}
+    .qr-card{box-shadow:none;border:1px solid #ddd;break-inside:avoid}
+    .qr-card:hover{transform:none}
+    .qr-card .qr-body{padding:12px}
+  }
+  @media(max-width:560px){
+    .grid{grid-template-columns:1fr 1fr;gap:10px;padding:10px}
+    .qr-card .card-head{padding:8px 10px}
+    .qr-card .card-info h3{font-size:11px}
+    .qr-card .qr-body{padding:10px}
+    .qr-card canvas{width:100%!important;height:auto!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>CSU-A AR Navigation QR Codes</h1>
+  <p>Print and place at each building entrance for visitors to scan</p>
+  <div class="url-preview" id="url-preview">https://yourdomain.com/ar_navigation.html?dest=admin</div>
+</div>
+
+<div class="toolbar">
+  <div class="url-input">
+    <label>AR URL:</label>
+    <input type="text" id="base-url" placeholder="https://yourdomain.com/ar_navigation.html" oninput="regenerate()">
+  </div>
+  <div class="actions">
+    <button class="active" onclick="setCols(this,260)">Grid</button>
+    <button onclick="setCols(this,200)">Compact</button>
+    <button onclick="setCols(this,160)">Dense</button>
+    <button class="print-btn" onclick="window.print()">Print All</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+<div class="summary" id="summary"></div>
+
+<script>
+const BUILDINGS = [
+  { key:'admin',       name:'Administration Building',  icon:'🏛️', sub:'Registrar · HRDO · Guidance · Finance',  dist:'180m ~2 min' },
+  { key:'cte',         name:'College of Teacher Education', icon:'🎓', sub:'CTE Building',                         dist:'260m ~3 min' },
+  { key:'gymplex',     name:'Gymplex',                    icon:'🏀', sub:'Gymnasium Complex',                     dist:'230m ~3 min' },
+  { key:'gatchalian',  name:'Gatchalian Building',        icon:'🏢', sub:'Gatchalian Hall',                       dist:'240m ~3 min' },
+  { key:'cics',        name:'CICS Building',              icon:'💻', sub:'College of Info & Computing Sciences',   dist:'160m ~2 min' },
+  { key:'library',     name:'Library Building',           icon:'📚', sub:'Learning Resource Center',              dist:'215m ~3 min' },
+  { key:'avr',         name:'AVR Building',               icon:'🎬', sub:'Audio Visual Room',                     dist:'170m ~2 min' },
+  { key:'canteen',     name:'Canteen / Food Court',       icon:'🍜', sub:'Dining Hall',                           dist:'290m ~4 min' },
+  { key:'cit',         name:'CIT Building',               icon:'🔧', sub:'College of Industrial Technology',      dist:'330m ~4 min' },
+  { key:'cbea',        name:'CBEA Building',              icon:'📊', sub:'College of Business & Accountancy',     dist:'360m ~5 min' },
+  { key:'infra',       name:'Infrastructure Office',      icon:'🏗️', sub:'Infrastructure',                        dist:'530m ~7 min' },
+  { key:'dnst',        name:'DNST Building',              icon:'⛰️', sub:'DNST',                                  dist:'580m ~8 min' },
+  { key:'oldadmin',    name:'Old Admin Building',         icon:'🏚️', sub:'Old Administration',                    dist:'520m ~7 min' },
+  { key:'hatchery',    name:'Hatchery',                   icon:'🐟', sub:'Fish Hatchery',                         dist:'620m ~8 min' },
+  { key:'icrm',        name:'ICRM Building',              icon:'🌊', sub:'Institute of Coastal Resource Mgmt',    dist:'450m ~6 min' },
+  { key:'ceo_cottage', name:"CEO's Cottage",              icon:'🏠', sub:'Campus Executive Officer Cottage',       dist:'120m ~2 min' },
+  { key:'villa1',      name:'Executive Villa 1',          icon:'🏡', sub:'Executive Villa',                       dist:'100m ~1 min' },
+  { key:'dorm',        name:"Lecturer's Dormitory",       icon:'🛏️', sub:'Faculty Dormitory',                     dist:'350m ~4 min' },
+];
+
+function getBase() {
+  const v = document.getElementById('base-url').value.trim();
+  return v || (location.origin + '/ar_navigation.html');
+}
+
+function regenerate() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#6b7280"><div class="spinner" style="width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#1a56db;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 10px"></div>Generating...</div>';
+
+  const base = getBase();
+  document.getElementById('url-preview').textContent = base + '?dest=admin';
+
+  setTimeout(() => {
+    grid.innerHTML = '';
+    BUILDINGS.forEach(b => {
+      const url = base + '?dest=' + b.key;
+
+      const card = document.createElement('div');
+      card.className = 'qr-card';
+
+      card.innerHTML = `
+        <div class="card-head">
+          <div class="card-icon">${b.icon}</div>
+          <div class="card-info">
+            <h3>${b.name}</h3>
+            <div class="sub">${b.sub}</div>
+          </div>
+        </div>
+        <div class="qr-body">
+          <canvas id="qr-${b.key}"></canvas>
+          <div class="qr-url">${url}</div>
+        </div>
+        <div class="card-foot">${b.dist} · Scan to navigate with AR arrows</div>
+      `;
+      grid.appendChild(card);
+
+      QRCode.toCanvas(document.getElementById('qr-' + b.key), url, {
+        width: 160,
+        margin: 2,
+        color: { dark: '#1e293b', light: '#ffffff' },
+        errorCorrectionLevel: 'M'
+      }, err => {
+        if (err) console.error('QR error:', b.key, err);
+      });
+    });
+
+    document.getElementById('summary').innerHTML =
+      '<strong>' + BUILDINGS.length + ' buildings</strong> — All QR codes encoded with <code>' + base.split('/').pop() + '</code>';
+  }, 50);
+}
+
+function setCols(btn, w) {
+  document.querySelectorAll('.actions button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const g = document.getElementById('grid');
+  if (w <= 160) g.style.gridTemplateColumns = 'repeat(auto-fill,minmax(160px,1fr))';
+  else if (w <= 200) g.style.gridTemplateColumns = 'repeat(auto-fill,minmax(200px,1fr))';
+  else g.style.gridTemplateColumns = 'repeat(auto-fill,minmax(260px,1fr))';
+}
+
+// Init
+regenerate();
+</script>
+</body>
+</html>

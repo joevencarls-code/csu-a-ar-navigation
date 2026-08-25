@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>CSU-A AR Navigation</title>
+<style>
+  :root{--blue:#1a56db;--blue-light:#3b82f6;--blue-dark:#1e40af;--green:#059669;--gold:#d97706;--red:#dc2626;--radius:14px}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;position:fixed;top:0;left:0;width:100%;background:#000}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  button{font-family:inherit}
+
+  #app{width:100%;height:100%;position:relative;overflow:hidden}
+
+  /* ── Camera ── */
+  #camera-feed{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:1;background:#111}
+  #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
+
+  /* ── Loading ── */
+  .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay-dark{background:#0f172a;color:#fff}
+  .overlay-scan{background:rgba(0,0,0,.75);z-index:30}
+  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.12);border-top-color:var(--blue-light);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Top Bar ── */
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(0,0,0,.72) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:none}
+  .topbar>*{pointer-events:auto}
+  .topbar-title{flex:1;color:#fff;font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-badge{background:var(--blue);color:#fff;font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;transition:background .3s}
+  .topbar-badge.active{background:var(--green)}
+  .topbar-btn{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);flex-shrink:0;cursor:pointer}
+
+  /* ── Compass ── */
+  .compass{position:absolute;top:60px;right:14px;z-index:20;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.15)}
+  .compass.show{display:flex}
+  .compass-needle{width:28px;height:28px;transition:transform .15s linear}
+
+  /* ── GPS indicator ── */
+  .gps-dot{position:absolute;top:60px;left:14px;z-index:20;width:10px;height:10px;border-radius:50%;background:#6b7280;display:none}
+  .gps-dot.show{display:block}
+  .gps-dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+
+  /* ── Scanner ── */
+  .scan-frame{width:250px;height:250px;border:2.5px solid rgba(255,255,255,.85);border-radius:18px;position:relative;margin-bottom:20px}
+  .scan-frame::before{content:'';position:absolute;inset:-3px;border-radius:20px;border:3px solid transparent;border-top-color:var(--blue-light);animation:rotateBorder 1.4s linear infinite}
+  @keyframes rotateBorder{to{transform:rotate(360deg)}}
+  .scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--blue-light),transparent);animation:scanY 2.2s ease-in-out infinite}
+  @keyframes scanY{0%,100%{top:8px}50%{top:calc(100% - 8px)}}
+  .scan-corners{position:absolute;inset:-1px}
+  .scan-corners::before,.scan-corners::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
+  .scan-corners::before{top:-1px;left:-1px;border-width:3px 0 0 3px;border-radius:14px 0 0 0}
+  .scan-corners::after{top:-1px;right:-1px;border-width:3px 3px 0 0;border-radius:0 14px 0 0}
+  .scan-corners-bottom::before,.scan-corners-bottom::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
+  .scan-corners-bottom{position:absolute;bottom:-1px;left:-1px;right:-1px}
+  .scan-corners-bottom::before{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 14px}
+  .scan-corners-bottom::after{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 14px 0}
+  .scan-hint{color:#fff;font-size:14px;text-align:center;line-height:1.6;text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 16px}
+  .scan-hint strong{display:block;font-size:16px;margin-bottom:4px}
+  .scan-cancel{margin-top:16px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .scan-fallback{margin-top:12px}
+  .scan-fallback input{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;width:220px;text-align:center;outline:none}
+  .scan-fallback input::placeholder{color:rgba(255,255,255,.4)}
+  .scan-fallback button{margin-top:8px;background:var(--blue);border:none;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;width:220px;cursor:pointer}
+
+  /* ── Bottom Panel ── */
+  .bottom-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:rgba(255,255,255,.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:22px 22px 0 0;padding:16px 18px max(18px,env(safe-area-inset-bottom));box-shadow:0 -4px 32px rgba(0,0,0,.12);transform:translateY(100%);transition:transform .45s cubic-bezier(.16,1,.3,1)}
+  .bottom-panel.show{transform:translateY(0)}
+  .panel-handle{width:32px;height:4px;background:#d1d5db;border-radius:2px;margin:0 auto 12px}
+  .panel-name{font-size:17px;font-weight:800;color:#111827;line-height:1.2}
+  .panel-sub{font-size:12px;color:#6b7280;margin:3px 0 10px;display:flex;align-items:center;gap:4px}
+  .panel-sub .icon{font-size:14px}
+
+  /* Direction card */
+  .dir-card{display:flex;align-items:center;gap:12px;background:#f0f4ff;border-radius:var(--radius);padding:12px;margin-bottom:12px}
+  .dir-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dir-label{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .dir-text{font-size:15px;font-weight:700;color:#111827;line-height:1.25}
+
+  /* Stats row */
+  .stats-row{display:flex;gap:8px;margin-bottom:10px}
+  .stat{flex:1;background:#f5f7fa;border-radius:12px;padding:9px 8px;text-align:center}
+  .stat-val{font-size:15px;font-weight:800;color:var(--blue)}
+  .stat-lbl{font-size:9px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
+
+  /* Steps */
+  .steps{max-height:120px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
+  .step{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid #f3f4f6}
+  .step:last-child{border:none}
+  .step-num{width:22px;height:22px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;transition:all .3s}
+  .step.done .step-num{background:var(--green);color:#fff}
+  .step.current .step-num{background:var(--blue);color:#fff;box-shadow:0 0 0 3px rgba(26,86,219,.2)}
+  .step-txt{font-size:12px;color:#6b7280;line-height:1.4;transition:color .3s}
+  .step.done .step-txt{color:#9ca3af;text-decoration:line-through}
+  .step.current .step-txt{color:#111827;font-weight:600}
+
+  /* Buttons */
+  .btn-row{display:flex;gap:8px}
+  .btn{flex:1;padding:12px;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;box-shadow:0 4px 14px rgba(26,86,219,.3)}
+  .btn-success{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 14px rgba(5,150,105,.3)}
+  .btn-outline{background:#f0f4ff;color:var(--blue)}
+
+  /* ── No Camera ── */
+  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#0f172a,#1e293b);color:#fff;padding:32px;text-align:center}
+  .no-cam-icon{font-size:56px;margin-bottom:16px}
+  .no-cam h2{font-size:20px;margin-bottom:6px}
+  .no-cam p{font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:20px;max-width:300px}
+  .no-cam button{background:var(--blue);color:#fff;border:none;padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer}
+
+  /* ── Arrival ── */
+  .arrival{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:all .4s}
+  .arrival.show{opacity:1;visibility:visible}
+  .arrival-circle{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin-bottom:18px;animation:popIn .5s cubic-bezier(.16,1,.3,1)}
+  @keyframes popIn{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
+  .arrival h2{color:#fff;font-size:22px;font-weight:800;margin-bottom:4px}
+  .arrival p{color:#94a3b8;font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
+  .arrival button{background:#fff;color:#0f172a;border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+
+  /* ── Toast ── */
+  .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,0,0,.85);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ── Step advance overlay ── */
+  .step-tap-zone{position:absolute;bottom:0;left:0;right:0;height:45%;z-index:15;cursor:pointer;display:none}
+  .step-tap-zone.show{display:block}
+  .step-tap-hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.6);font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.5);animation:bobUpDown 2s ease-in-out infinite;white-space:nowrap}
+  @keyframes bobUpDown{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-6px)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Loading -->
+  <div class="overlay overlay-dark" id="loading">
+    <div class="spinner"></div>
+    <p style="color:#94a3b8;font-size:13px;margin-top:14px">Starting camera...</p>
+  </div>
+
+  <!-- Camera -->
+  <video id="camera-feed" autoplay playsinline muted></video>
+  <canvas id="ar-canvas"></canvas>
+
+  <!-- No Camera -->
+  <div class="no-cam" id="no-cam" style="display:none">
+    <div class="no-cam-icon">📷</div>
+    <h2>Camera Required</h2>
+    <p>Allow camera access to use AR Navigation. Point your camera at QR codes placed at each building.</p>
+    <button onclick="initCamera()">Try Again</button>
+  </div>
+
+  <!-- GPS dot -->
+  <div class="gps-dot" id="gps-dot"></div>
+
+  <!-- Compass -->
+  <div class="compass" id="compass">
+    <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle">
+      <polygon points="14,2 18,12 14,10 10,12" fill="#ef4444"/>
+      <polygon points="14,26 10,16 14,18 18,16" fill="#94a3b8"/>
+    </svg>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="topbar" id="topbar" style="display:none">
+    <button class="topbar-btn" onclick="goHome()" aria-label="Back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span class="topbar-title" id="topbar-title">CSU-A AR Navigation</span>
+    <span class="topbar-badge" id="topbar-badge">QR SCAN</span>
+    <button class="topbar-btn" onclick="openScan()" aria-label="Scan QR">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- QR Scanner Overlay -->
+  <div class="overlay overlay-scan hidden" id="scan-overlay">
+    <div class="scan-frame">
+      <div class="scan-line"></div>
+      <div class="scan-corners"></div>
+      <div class="scan-corners-bottom"></div>
+      <canvas id="scan-canvas" style="display:none"></canvas>
+    </div>
+    <div class="scan-hint">
+      <strong>Scan Building QR Code</strong>
+      Point your camera at a QR code at any CSU-A building
+    </div>
+    <div class="scan-fallback">
+      <input type="text" id="manual-input" placeholder="Or type building key (e.g. admin)">
+      <button onclick="manualNavigate()">Go</button>
+    </div>
+    <button class="scan-cancel" onclick="closeScan()">Cancel</button>
+  </div>
+
+  <!-- Step advance tap zone -->
+  <div class="step-tap-zone" id="step-tap" onclick="advanceStep()">
+    <div class="step-tap-hint">Tap to advance to next step</div>
+  </div>
+
+  <!-- Bottom Panel -->
+  <div class="bottom-panel" id="bottom-panel">
+    <div class="panel-handle"></div>
+    <div class="panel-name" id="p-name"></div>
+    <div class="panel-sub" id="p-sub"></div>
+    <div class="dir-card" id="dir-card">
+      <div class="dir-icon" id="dir-icon"></div>
+      <div>
+        <div class="dir-label">Next Direction</div>
+        <div class="dir-text" id="dir-text"></div>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-val" id="s-dist">--</div><div class="stat-lbl">Distance</div></div>
+      <div class="stat"><div class="stat-val" id="s-time">--</div><div class="stat-lbl">Time</div></div>
+      <div class="stat"><div class="stat-val" id="s-step">--</div><div class="stat-lbl">Step</div></div>
+      <div class="stat"><div class="stat-val" id="s-gps">--</div><div class="stat-lbl">GPS</div></div>
+    </div>
+    <div class="steps" id="steps-container"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-advance" onclick="advanceStep()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Next Step
+      </button>
+      <button class="btn btn-outline" onclick="openScan()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+        Scan QR
+      </button>
+    </div>
+  </div>
+
+  <!-- Arrival -->
+  <div class="arrival" id="arrival">
+    <div class="arrival-circle">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2>You've Arrived!</h2>
+    <p id="arrival-msg"></p>
+    <button onclick="finishNavigation()">Done</button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ================================================================
+   BUILDING DATA — CSU-A Campus
+   ================================================================ */
+const BUILDINGS = {
+  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'180m', time:'~2 min', lat:18.34890, lng:121.64090,
+    steps:['Start at the main entrance gate','Head straight along the main road westward','Pass the flagpole on your left','Administration Building is on your right'] },
+  cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'260m', time:'~3 min', lat:18.34950, lng:121.63980,
+    steps:['Start at the main entrance','Walk west along the main road','Continue past the junction','CTE Building is on your left'] },
+  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.34980, lng:121.64050,
+    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road junction','Gymplex is straight ahead'] },
+  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.34970, lng:121.64070,
+    steps:['Start at the main entrance','Walk west on the main road','Turn right at the junction','Turn right again after the Gymplex','Gatchalian Building is on your left'] },
+  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'160m', time:'~2 min', lat:18.34930, lng:121.64120,
+    steps:['Start at the main entrance','Walk west on the main road','Turn right before the Gymplex junction','CICS Building is on your left'] },
+  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'215m', time:'~3 min', lat:18.34920, lng:121.64180,
+    steps:['Start at the main entrance','Walk west along the main road','Library is at the road corner'] },
+  avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'170m', time:'~2 min', lat:18.34910, lng:121.64150,
+    steps:['Start at the main entrance','Walk west on the main road','Turn left off the main road','AVR Building is on your right'] },
+  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.35020, lng:121.64200,
+    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road corner','Continue north toward the canteen','Canteen is on your left'] },
+  cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'330m', time:'~4 min', lat:18.34960, lng:121.64300,
+    steps:['Start at the main entrance','Walk west on the main road','Continue past the Library junction','CIT Building is on your right'] },
+  cbea:        { name:'CBEA Building', icon:'📊', loc:'West campus – College of Business & Accountancy', dist:'360m', time:'~5 min', lat:18.34980, lng:121.64350,
+    steps:['Start at the main entrance','Walk west on the main road','Continue past the CIT junction','CBEA Building is on your right'] },
+  infra:       { name:'Infrastructure Office', icon:'🏗️', loc:'Far west campus – Pond Pavilion area', dist:'530m', time:'~7 min', lat:18.35050, lng:121.64420,
+    steps:['Start at the main entrance','Walk west the full length of the main road','Turn left at the junction','Cross to the pond pavilion','Infrastructure Office is ahead'] },
+  dnst:        { name:'DNST Building', icon:'⛰️', loc:'Hilltop campus', dist:'580m', time:'~8 min', lat:18.35100, lng:121.64400,
+    steps:['Start at the main entrance','Walk west on the main road','Turn left at the junction','Follow the road uphill','DNST Building is at the top'] },
+  oldadmin:    { name:'Old Admin Building', icon:'🏚️', loc:'West campus', dist:'520m', time:'~7 min', lat:18.34870, lng:121.64420,
+    steps:['Start at the main entrance','Walk west on the main road','Turn left at the junction','Old Admin is on your left'] },
+  hatchery:    { name:'Hatchery', icon:'🐟', loc:'South-west campus – Fish Hatchery', dist:'620m', time:'~8 min', lat:18.34800, lng:121.64450,
+    steps:['Start at the main entrance','Walk west on the main road','Turn left at the junction','Follow the path south along the pond','Hatchery is on your left'] },
+  icrm:        { name:'ICRM Building', icon:'🌊', loc:'South campus – Institute of Coastal Resource Mgmt', dist:'450m', time:'~6 min', lat:18.34780, lng:121.64280,
+    steps:['Start at the main entrance','Walk west-northwest','Turn south early at the first junction','Cross past the pond','ICRM Building is on your right'] },
+  ceo_cottage: { name:"CEO's Cottage", icon:'🏠', loc:'Central campus – near Administration', dist:'120m', time:'~2 min', lat:18.34880, lng:121.64100,
+    steps:['Start at the main entrance','Walk a short distance west','CEO\'s Cottage is on your right'] },
+  villa1:      { name:'Executive Villa 1', icon:'🏡', loc:'Central campus', dist:'100m', time:'~1 min', lat:18.34860, lng:121.64080,
+    steps:['Start at the main entrance','Walk slightly west','Executive Villa 1 is nearby'] },
+  dorm:        { name:"Lecturer's Dormitory", icon:'🛏️', loc:'South campus – Faculty Dormitory', dist:'350m', time:'~4 min', lat:18.34820, lng:121.64150,
+    steps:['Start at the main entrance','Walk west along the main road','Turn south at the junction','Dormitory is straight ahead'] }
+};
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let stream = null;
+let arCtx = null;
+let arW = 0, arH = 0;
+let animFrame = null;
+
+let dest = null;          // current building key
+let stepIdx = 0;          // current step index
+let gpsPos = null;        // {lat, lng}
+let heading = 0;          // compass heading degrees
+let bearing = 0;          // bearing to destination degrees
+let distToDest = 0;       // metres
+let userSpeed = 1.4;      // walking speed m/s estimate
+let lastGpsTime = 0;
+let lastGpsDist = 0;
+let gpsWatchId = null;
+let orientationListener = null;
+let arrived = false;
+
+// AR animation state
+let arTime = 0;
+let arBob = 0;
+let arrowRotation = 0;    // smooth target rotation
+let currentArrowRot = 0;  // interpolated
+
+// QR scanning
+let barcodeDetector = null;
+let scanning = false;
+let scanCanvas, scanCtx;
+
+/* ================================================================
+   INIT
+   ================================================================ */
+window.addEventListener('load', async () => {
+  const params = new URLSearchParams(location.search);
+  const d = params.get('dest');
+  if (d && BUILDINGS[d]) {
+    await initCamera();
+    setDestination(d);
+  } else {
+    await initCamera();
+    openScan();
+  }
+});
+
+async function initCamera() {
+  const loading = document.getElementById('loading');
+  const noCam = document.getElementById('no-cam');
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} },
+      audio: false
+    });
+    const video = document.getElementById('camera-feed');
+    video.srcObject = stream;
+    await video.play();
+
+    const canvas = document.getElementById('ar-canvas');
+    arCtx = canvas.getContext('2d');
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    renderLoop();
+    loading.classList.add('hidden');
+    noCam.style.display = 'none';
+    document.getElementById('topbar').style.display = 'flex';
+
+    // Try init barcode detector
+    tryInitBarcodeDetector();
+  } catch (e) {
+    console.error('Camera init failed:', e);
+    loading.classList.add('hidden');
+    noCam.style.display = 'flex';
+  }
+}
+
+function handleResize() {
+  const dpr = window.devicePixelRatio || 1;
+  arW = window.innerWidth;
+  arH = window.innerHeight;
+  const c = document.getElementById('ar-canvas');
+  c.width = arW * dpr;
+  c.height = arH * dpr;
+  c.style.width = arW + 'px';
+  c.style.height = arH + 'px';
+  if (arCtx) arCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+/* ================================================================
+   GPS TRACKING
+   ================================================================ */
+function startGPS() {
+  if (!navigator.geolocation) return;
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const now = Date.now();
+      const newLat = pos.coords.latitude;
+      const newLng = pos.coords.longitude;
+      const newAcc = pos.coords.accuracy;
+
+      if (gpsPos) {
+        const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
+        const dt = (now - lastGpsTime) / 1000;
+        if (dt > 0 && d > 2) {
+          userSpeed = d / dt;
+        }
+      }
+
+      gpsPos = { lat: newLat, lng: newLng, acc: newAcc };
+      lastGpsTime = now;
+
+      const dot = document.getElementById('gps-dot');
+      dot.classList.add('show', 'on');
+
+      if (dest) updateDistanceAndBearing();
+    },
+    err => {
+      console.warn('GPS error:', err.message);
+      const dot = document.getElementById('gps-dot');
+      dot.classList.add('show');
+      dot.classList.remove('on');
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+  );
+}
+
+function stopGPS() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+}
+
+function updateDistanceAndBearing() {
+  if (!gpsPos || !dest) return;
+  const b = BUILDINGS[dest];
+  distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+  bearing = calcBearing(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+
+  // Update stats
+  document.getElementById('s-dist').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
+  const eta = Math.max(1, Math.round(distToDest / userSpeed / 60));
+  document.getElementById('s-time').textContent = '~' + eta + ' min';
+  document.getElementById('s-gps').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
+
+  // Arrow rotation: difference between compass heading and bearing to destination
+  const diff = normalizeAngle(bearing - heading);
+  arrowRotation = (diff * Math.PI) / 180;
+
+  // Auto-advance steps based on distance thresholds
+  autoAdvanceByDistance();
+
+  // Arrival check
+  if (distToDest < 20 && !arrived) {
+    triggerArrival();
+  }
+}
+
+function autoAdvanceByDistance() {
+  if (!dest || arrived) return;
+  const b = BUILDINGS[dest];
+  const totalSteps = b.steps.length;
+  if (totalSteps <= 1) return;
+
+  const thresholds = [1.0, 0.75, 0.5, 0.3, 0.15]; // fraction of total distance
+  const maxStep = Math.min(totalSteps - 1, thresholds.length);
+  const fraction = distToDest / (parseFloat(b.dist) || 200);
+
+  let newStep = 0;
+  for (let i = 0; i < maxStep; i++) {
+    if (fraction < thresholds[i]) newStep = i + 1;
+  }
+  newStep = Math.min(newStep, totalSteps - 1);
+
+  if (newStep > stepIdx) {
+    stepIdx = newStep;
+    refreshUI();
+    showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
+  }
+}
+
+function triggerArrival() {
+  arrived = true;
+  const b = BUILDINGS[dest];
+  document.getElementById('arrival-msg').textContent = 'You have reached ' + b.name;
+  document.getElementById('arrival').classList.add('show');
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  showToast('You have arrived!');
+}
+
+/* ================================================================
+   COMPASS / ORIENTATION
+   ================================================================ */
+function startCompass() {
+  let hasPermission = false;
+
+  // iOS 13+ requires permission
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(state => {
+      if (state === 'granted') installOrientationListener();
+    }).catch(() => {});
+  } else {
+    installOrientationListener();
+  }
+}
+
+function installOrientationListener() {
+  orientationListener = e => {
+    let h = 0;
+    if (e.webkitCompassHeading !== undefined) {
+      h = e.webkitCompassHeading; // iOS
+    } else if (e.alpha !== null) {
+      h = (360 - e.alpha) % 360; // Android
+    }
+    heading = h;
+    const needle = document.getElementById('compass-needle');
+    if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
+  };
+  window.addEventListener('deviceorientation', orientationListener, true);
+  document.getElementById('compass').classList.add('show');
+}
+
+function stopCompass() {
+  if (orientationListener) {
+    window.removeEventListener('deviceorientation', orientationListener, true);
+    orientationListener = null;
+  }
+}
+
+/* ================================================================
+   QR SCANNING
+   ================================================================ */
+async function tryInitBarcodeDetector() {
+  if ('BarcodeDetector' in window) {
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      if (fmts.includes('qr_code')) {
+        barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      }
+    } catch(e) {}
+  }
+  // Fallback canvas for jsQR
+  scanCanvas = document.getElementById('scan-canvas');
+  scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+}
+
+function openScan() {
+  document.getElementById('scan-overlay').classList.remove('hidden');
+  document.getElementById('manual-input').value = '';
+  document.getElementById('manual-input').focus();
+  scanning = true;
+  scanLoop();
+}
+
+function closeScan() {
+  document.getElementById('scan-overlay').classList.add('hidden');
+  scanning = false;
+}
+
+async function scanLoop() {
+  if (!scanning) return;
+
+  // Try BarcodeDetector first
+  if (barcodeDetector) {
+    try {
+      const video = document.getElementById('camera-feed');
+      const barcodes = await barcodeDetector.detect(video);
+      if (barcodes.length > 0) {
+        handleScanData(barcodes[0].rawValue);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: canvas pixel scan (basic pattern match)
+  // We just keep looping until BarcodeDetector works or manual entry
+  if (scanning) requestAnimationFrame(scanLoop);
+}
+
+function handleScanData(raw) {
+  let key = extractBuildingKey(raw);
+  if (key && BUILDINGS[key]) {
+    scanning = false;
+    if (navigator.vibrate) navigator.vibrate(100);
+    closeScan();
+    setDestination(key);
+    showToast('Navigating to ' + BUILDINGS[key].name);
+  }
+}
+
+function extractBuildingKey(text) {
+  let s = text.toLowerCase().trim();
+  // csu-ar://admin
+  if (s.startsWith('csu-ar://')) s = s.slice(9);
+  // http://domain/ar_navigation.html?dest=admin
+  if (s.startsWith('http')) {
+    try {
+      const u = new URL(text);
+      const d = u.searchParams.get('dest');
+      if (d) return d;
+    } catch(e) {}
+    s = s.split('?')[0].split('/').pop();
+  }
+  // csu-ar:admin
+  if (s.startsWith('csu-ar:')) s = s.slice(7);
+  // Clean up
+  s = s.split('?')[0].split('/').pop().replace(/[^a-z0-9_]/g, '');
+  return s || null;
+}
+
+function manualNavigate() {
+  const input = document.getElementById('manual-input').value.toLowerCase().trim();
+  if (input && BUILDINGS[input]) {
+    scanning = false;
+    closeScan();
+    setDestination(input);
+    showToast('Navigating to ' + BUILDINGS[input].name);
+  } else if (input) {
+    showToast('Building "' + input + '" not found');
+  }
+}
+
+// Handle Enter key on manual input
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('manual-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') manualNavigate();
+  });
+});
+
+/* ================================================================
+   DESTINATION / NAVIGATION
+   ================================================================ */
+function setDestination(key) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  dest = key;
+  stepIdx = 0;
+  arrived = false;
+  arrowRotation = 0;
+  currentArrowRot = 0;
+
+  document.getElementById('topbar-title').textContent = b.name;
+  document.getElementById('topbar-badge').textContent = 'NAVIGATING';
+  document.getElementById('topbar-badge').classList.add('active');
+  document.getElementById('p-name').textContent = b.icon + ' ' + b.name;
+  document.getElementById('p-sub').innerHTML = '<span class="icon">📍</span> ' + b.loc;
+  document.getElementById('s-dist').textContent = b.dist;
+  document.getElementById('s-time').textContent = b.time;
+  document.getElementById('s-step').textContent = '1/' + b.steps.length;
+  document.getElementById('s-gps').textContent = gpsPos ? Math.round(gpsPos.acc || 0) + 'm' : 'No GPS';
+
+  refreshUI();
+
+  document.getElementById('bottom-panel').classList.add('show');
+  document.getElementById('step-tap').classList.add('show');
+  document.getElementById('compass').classList.add('show');
+
+  // Update URL
+  const u = new URL(location);
+  u.searchParams.set('dest', key);
+  history.replaceState({}, '', u);
+
+  // Start GPS + compass
+  startGPS();
+  startCompass();
+}
+
+function refreshUI() {
+  if (!dest) return;
+  const b = BUILDINGS[dest];
+
+  // Direction card
+  const step = b.steps[stepIdx];
+  const dirColors = ['#dbeafe','#dcfce7','#fef3c7','#fce7f3','#ede9fe','#e0e7ff','#ccfbf1','#fef9c3'];
+  const dirStrokes = ['#1a56db','#059669','#d97706','#db2777','#7c3aed','#4338ca','#0d9488','#a16207'];
+  const ci = stepIdx % dirColors.length;
+  document.getElementById('dir-icon').style.background = dirColors[ci];
+
+  // Direction arrow SVG based on step context
+  const arrowSVGs = [
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>',
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
+  ];
+  const dirIdx = stepIdx % arrowSVGs.length;
+  document.getElementById('dir-icon').innerHTML = arrowSVGs[dirIdx].replace('STROKE', dirStrokes[ci]);
+  document.getElementById('dir-text').textContent = step;
+
+  // Stats
+  document.getElementById('s-step').textContent = (stepIdx + 1) + '/' + b.steps.length;
+
+  // Steps list
+  const container = document.getElementById('steps-container');
+  container.innerHTML = b.steps.map((s, i) => {
+    let cls = '';
+    if (i < stepIdx) cls = 'done';
+    else if (i === stepIdx) cls = 'current';
+    return '<div class="step ' + cls + '"><div class="step-num">' + (i < stepIdx ? '✓' : (i+1)) + '</div><div class="step-txt">' + s + '</div></div>';
+  }).join('');
+
+  // Scroll to current step
+  const currentEl = container.querySelector('.step.current');
+  if (currentEl) currentEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+  // Button text on last step
+  const btnAdv = document.getElementById('btn-advance');
+  if (stepIdx >= b.steps.length - 1) {
+    btnAdv.className = 'btn btn-success';
+    btnAdv.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Arrived!';
+  } else {
+    btnAdv.className = 'btn btn-primary';
+    btnAdv.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Next Step';
+  }
+
+  if (!gpsPos) {
+    // Without GPS, estimate distance from step position
+    const remaining = b.steps.length - stepIdx;
+    document.getElementById('s-dist').textContent = Math.round(remaining * 50) + 'm';
+    document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining * 0.7)) + ' min';
+  }
+}
+
+function advanceStep() {
+  if (!dest) return;
+  const b = BUILDINGS[dest];
+
+  if (stepIdx >= b.steps.length - 1) {
+    triggerArrival();
+    return;
+  }
+
+  stepIdx++;
+  refreshUI();
+  if (navigator.vibrate) navigator.vibrate(30);
+  showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
+}
+
+function finishNavigation() {
+  document.getElementById('arrival').classList.remove('show');
+  dest = null;
+  stepIdx = 0;
+  arrived = false;
+
+  document.getElementById('bottom-panel').classList.remove('show');
+  document.getElementById('step-tap').classList.remove('show');
+  document.getElementById('compass').classList.remove('show');
+  document.getElementById('gps-dot').classList.remove('show');
+
+  document.getElementById('topbar-title').textContent = 'CSU-A AR Navigation';
+  document.getElementById('topbar-badge').textContent = 'QR SCAN';
+  document.getElementById('topbar-badge').classList.remove('active');
+
+  history.replaceState({}, '', location.pathname);
+  stopGPS();
+  stopCompass();
+
+  setTimeout(() => openScan(), 500);
+}
+
+function goHome() {
+  if (dest) {
+    if (confirm('Stop navigation to ' + BUILDINGS[dest].name + '?')) {
+      finishNavigation();
+    }
+  } else {
+    openScan();
+  }
+}
+
+/* ================================================================
+   AR RENDER LOOP
+   ================================================================ */
+function renderLoop(ts = 0) {
+  const dt = Math.min((ts - (renderLoop._last || 0)) / 1000, 0.1);
+  renderLoop._last = ts;
+  arTime = ts;
+
+  arCtx.clearRect(0, 0, arW, arH);
+
+  if (dest && !arrived) {
+    arBob += dt * 2.5;
+    const bob = Math.sin(arBob) * 10;
+    const cx = arW / 2;
+    const cy = arH / 2 + bob;
+
+    // Smooth arrow rotation
+    currentArrowRot += (arrowRotation - currentArrowRot) * 0.06;
+
+    // Draw ground glow
+    drawGroundGlow(cx, cy + 20, ts);
+
+    // Draw pulsing rings
+    drawPulseRings(cx, cy, ts);
+
+    // Draw distance circle
+    drawDistanceCircle(cx, cy);
+
+    // Draw directional arrow
+    drawNavigationArrow(cx, cy, currentArrowRot);
+
+    // Draw distance text in AR
+    if (distToDest > 0) {
+      drawARDistanceLabel(cx, cy - 100);
+    }
+  }
+
+  animFrame = requestAnimationFrame(renderLoop);
+}
+
+function drawNavigationArrow(x, y, angle) {
+  arCtx.save();
+  arCtx.translate(x, y);
+  arCtx.rotate(angle);
+
+  // Outer glow
+  arCtx.shadowColor = 'rgba(59,130,246,0.6)';
+  arCtx.shadowBlur = 24;
+
+  // Arrow shape — larger, 3D feel
+  const s = 1.3;
+  arCtx.scale(s, s);
+
+  arCtx.beginPath();
+  arCtx.moveTo(0, -48);
+  arCtx.bezierCurveTo(28, -20, 18, -10, 14, 0);
+  arCtx.lineTo(14, 40);
+  arCtx.lineTo(8, 40);
+  arCtx.lineTo(8, 0);
+  arCtx.bezierCurveTo(4, -4, -4, -4, -8, 0);
+  arCtx.lineTo(-8, 40);
+  arCtx.lineTo(-14, 40);
+  arCtx.lineTo(-14, 0);
+  arCtx.bezierCurveTo(-18, -10, -28, -20, 0, -48);
+  arCtx.closePath();
+
+  const grad = arCtx.createLinearGradient(0, -48, 0, 40);
+  grad.addColorStop(0, '#93c5fd');
+  grad.addColorStop(0.4, '#3b82f6');
+  grad.addColorStop(1, '#1e40af');
+  arCtx.fillStyle = grad;
+  arCtx.fill();
+
+  arCtx.shadowBlur = 0;
+
+  // White highlight
+  arCtx.beginPath();
+  arCtx.moveTo(0, -42);
+  arCtx.bezierCurveTo(14, -24, 10, -14, 6, -2);
+  arCtx.lineTo(6, 30);
+  arCtx.lineTo(2, 30);
+  arCtx.lineTo(2, -2);
+  arCtx.bezierCurveTo(-2, -6, -6, -10, 0, -42);
+  arCtx.closePath();
+  arCtx.fillStyle = 'rgba(255,255,255,0.18)';
+  arCtx.fill();
+
+  // Border
+  arCtx.beginPath();
+  arCtx.moveTo(0, -48);
+  arCtx.bezierCurveTo(28, -20, 18, -10, 14, 0);
+  arCtx.lineTo(14, 40);
+  arCtx.lineTo(-14, 40);
+  arCtx.lineTo(-14, 0);
+  arCtx.bezierCurveTo(-18, -10, -28, -20, 0, -48);
+  arCtx.closePath();
+  arCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+  arCtx.lineWidth = 1.5;
+  arCtx.stroke();
+
+  arCtx.restore();
+}
+
+function drawPulseRings(x, y, t) {
+  arCtx.save();
+  for (let i = 0; i < 3; i++) {
+    const phase = ((t / 1200) + i * 0.33) % 1;
+    const r = 55 + phase * 50;
+    const a = (1 - phase) * 0.35;
+    arCtx.beginPath();
+    arCtx.arc(x, y, r, 0, Math.PI * 2);
+    arCtx.strokeStyle = 'rgba(59,130,246,' + a + ')';
+    arCtx.lineWidth = 2 - phase;
+    arCtx.stroke();
+  }
+  arCtx.restore();
+}
+
+function drawGroundGlow(x, y, t) {
+  arCtx.save();
+  const pulse = 0.5 + Math.sin(t / 600) * 0.15;
+  const grad = arCtx.createRadialGradient(x, y, 0, x, y, 100);
+  grad.addColorStop(0, 'rgba(59,130,246,' + (0.15 * pulse) + ')');
+  grad.addColorStop(1, 'rgba(59,130,246,0)');
+  arCtx.fillStyle = grad;
+  arCtx.fillRect(x - 100, y - 100, 200, 200);
+  arCtx.restore();
+}
+
+function drawDistanceCircle(x, y) {
+  arCtx.save();
+  arCtx.beginPath();
+  arCtx.arc(x, y, 85, 0, Math.PI * 2);
+  arCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+  arCtx.lineWidth = 1;
+  arCtx.setLineDash([5, 5]);
+  arCtx.stroke();
+  arCtx.setLineDash([]);
+  arCtx.restore();
+}
+
+function drawARDistanceLabel(x, y) {
+  arCtx.save();
+  arCtx.textAlign = 'center';
+  arCtx.textBaseline = 'middle';
+
+  const dist = distToDest > 0 ? (distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km') : '';
+
+  // Background pill
+  const tw = arCtx.measureText(dist).width + 24;
+  arCtx.fillStyle = 'rgba(0,0,0,0.55)';
+  arCtx.beginPath();
+  arCtx.roundRect(x - tw/2, y - 14, tw, 28, 14);
+  arCtx.fill();
+
+  // Text
+  arCtx.fillStyle = '#fff';
+  arCtx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+  arCtx.fillText(dist, x, y + 1);
+
+  arCtx.restore();
+}
+
+/* ================================================================
+   UTILS
+   ================================================================ */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function calcBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function normalizeAngle(deg) {
+  return ((deg % 360) + 540) % 360 - 180;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ================================================================
+   CLEANUP
+   ================================================================ */
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (animFrame) cancelAnimationFrame(animFrame);
+  stopGPS();
+  stopCompass();
+  scanning = false;
+});
+</script>
+</body>
+</html>
