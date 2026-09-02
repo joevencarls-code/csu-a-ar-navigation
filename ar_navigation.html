@@ -20,6 +20,9 @@
   #camera-feed{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:1;background:#111}
   #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
 
+  /* ── Mini Map (AR overlay, Google Maps style) ── */
+  #minimap-canvas{position:absolute;z-index:5;bottom:170px;left:12px;width:118px;height:118px;border-radius:16px;pointer-events:none;background:rgba(15,23,42,0.72);border:2px solid rgba(255,255,255,0.18);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,0.45);display:none}
+
   /* ── Loading ── */
   .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
   .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
@@ -197,6 +200,7 @@
   <!-- Camera -->
   <video id="camera-feed" autoplay playsinline muted></video>
   <canvas id="ar-canvas"></canvas>
+  <canvas id="minimap-canvas"></canvas>
 
   <!-- No Camera -->
   <div class="no-cam" id="no-cam" style="display:none">
@@ -828,6 +832,7 @@ function setDestination(key) {
   currentArrowRot = 0;
 
   setDestinationUI(key);
+  startMinimap();
 
   // Update URL
   const u = new URL(location);
@@ -948,6 +953,7 @@ function finishNavigation() {
 
   history.replaceState({}, '', location.pathname);
   stopCompass();
+  stopMinimap();
 
   // Show search after finishing navigation
   setTimeout(() => openSearch(), 500);
@@ -1008,60 +1014,50 @@ function drawNavigationArrow(x, y, angle) {
   arCtx.translate(x, y);
   arCtx.rotate(angle);
 
-  // Outer glow
-  arCtx.shadowColor = 'rgba(59,130,246,0.6)';
-  arCtx.shadowBlur = 24;
+  // Drop shadow
+  arCtx.shadowColor = 'rgba(0,0,0,0.45)';
+  arCtx.shadowBlur = 18;
+  arCtx.shadowOffsetY = 4;
 
-  // Arrow shape — larger, 3D feel
-  const s = 1.3;
-  arCtx.scale(s, s);
-
+  // Thick directional arrow (classic compass/navigation arrow shape)
   arCtx.beginPath();
-  arCtx.moveTo(0, -48);
-  arCtx.bezierCurveTo(28, -20, 18, -10, 14, 0);
-  arCtx.lineTo(14, 40);
-  arCtx.lineTo(8, 40);
-  arCtx.lineTo(8, 0);
-  arCtx.bezierCurveTo(4, -4, -4, -4, -8, 0);
-  arCtx.lineTo(-8, 40);
-  arCtx.lineTo(-14, 40);
-  arCtx.lineTo(-14, 0);
-  arCtx.bezierCurveTo(-18, -10, -28, -20, 0, -48);
-  arCtx.closePath();
+  arCtx.moveTo(0, -52);          // tip
+  arCtx.lineTo(24, -6);          // right wing outer
+  arCtx.lineTo(10, -6);          // right wing inner
+  arCtx.lineTo(10, 44);          // right shaft
+  arCtx.lineTo(-10, 44);         // right shaft bottom
+  arCtx.lineTo(-10, -6);         // left shaft
+  arCtx.lineTo(-24, -6);         // left wing inner
+  arCtx.closePath();             // back to tip
 
-  const grad = arCtx.createLinearGradient(0, -48, 0, 40);
-  grad.addColorStop(0, '#93c5fd');
-  grad.addColorStop(0.4, '#3b82f6');
-  grad.addColorStop(1, '#1e40af');
+  const grad = arCtx.createLinearGradient(0, -52, 0, 44);
+  grad.addColorStop(0, '#a5c8ff');
+  grad.addColorStop(0.35, '#3b82f6');
+  grad.addColorStop(1, '#1d4ed8');
   arCtx.fillStyle = grad;
   arCtx.fill();
 
   arCtx.shadowBlur = 0;
+  arCtx.shadowOffsetY = 0;
 
-  // White highlight
-  arCtx.beginPath();
-  arCtx.moveTo(0, -42);
-  arCtx.bezierCurveTo(14, -24, 10, -14, 6, -2);
-  arCtx.lineTo(6, 30);
-  arCtx.lineTo(2, 30);
-  arCtx.lineTo(2, -2);
-  arCtx.bezierCurveTo(-2, -6, -6, -10, 0, -42);
-  arCtx.closePath();
-  arCtx.fillStyle = 'rgba(255,255,255,0.18)';
-  arCtx.fill();
-
-  // Border
-  arCtx.beginPath();
-  arCtx.moveTo(0, -48);
-  arCtx.bezierCurveTo(28, -20, 18, -10, 14, 0);
-  arCtx.lineTo(14, 40);
-  arCtx.lineTo(-14, 40);
-  arCtx.lineTo(-14, 0);
-  arCtx.bezierCurveTo(-18, -10, -28, -20, 0, -48);
-  arCtx.closePath();
-  arCtx.strokeStyle = 'rgba(255,255,255,0.5)';
-  arCtx.lineWidth = 1.5;
+  // White border
+  arCtx.lineJoin = 'round';
+  arCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+  arCtx.lineWidth = 3;
   arCtx.stroke();
+
+  // Inner highlight
+  arCtx.beginPath();
+  arCtx.moveTo(0, -40);
+  arCtx.lineTo(14, -8);
+  arCtx.lineTo(6, -8);
+  arCtx.lineTo(6, 34);
+  arCtx.lineTo(-6, 34);
+  arCtx.lineTo(-6, -8);
+  arCtx.lineTo(-14, -8);
+  arCtx.closePath();
+  arCtx.fillStyle = 'rgba(255,255,255,0.22)';
+  arCtx.fill();
 
   arCtx.restore();
 }
@@ -1228,12 +1224,18 @@ let mapAnimFrame = null;
 let mapImg = null;
 let mapImgLoaded = false;
 
+// Mini map (AR overlay) state
+let minimapCanvas = null;
+let minimapCtx = null;
+let minimapAnimFrame = null;
+let minimapReady = false;
+
 // Map image aspect ratio (matches assets/csu_map.png => 1672 x 941)
 const MAP_ASPECT = 1672 / 941;
 
-// Kiosk START point (the kiosk's location on the map), normalized 0..1.
-// Every campus route begins here, exactly like the main kiosk app.
-const KIOSK_POINT = { x: 0.9307, y: 0.3782 };
+// Building footprints ("obstacles") drawn as solid blocks on the map so the
+// navigation paths appear to route around real structures, like a floor plan.
+// Each is {x, y, w, h} in normalized (0..1) map coords, centred on its marker.
 
 // Hand-traced routes (normalized 0..1 relative to csu_map.png), ported
 // verbatim from lib/data/campus_routes_data.dart so the web map shows the
@@ -1270,6 +1272,26 @@ const MARKERS = {
   'ceo_cottage':[0.4937,0.5105], 'villa1':[0.5058,0.4543], 'dorm':[0.6286,0.5179]
 };
 
+// Building footprints ("obstacles") drawn as solid blocks on the map so the
+// navigation paths appear to route around real structures, like a floor plan.
+function buildObstacles() {
+  const defs = {
+    admin:[0.10,0.11], cte:[0.13,0.14], gymplex:[0.15,0.16], gatchalian:[0.13,0.14],
+    cics:[0.13,0.14], library:[0.11,0.12], avr:[0.09,0.10], canteen:[0.14,0.12],
+    cit:[0.11,0.12], cbea:[0.11,0.12], infra:[0.12,0.13], dnst:[0.13,0.16],
+    oldadmin:[0.10,0.12], hatchery:[0.12,0.13], icrm:[0.11,0.12],
+    ceo_cottage:[0.08,0.09], villa1:[0.06,0.07], dorm:[0.10,0.12]
+  };
+  const obs = [];
+  Object.entries(MARKERS).forEach(([key, m]) => {
+    const d = defs[key] || [0.10,0.10];
+    const w = d[0], h = d[1];
+    obs.push({ x: m[0] - w/2, y: m[1] - h/2, w: w, h: h, name: BUILDINGS[key] ? BUILDINGS[key].name : key, icon: BUILDINGS[key] ? BUILDINGS[key].icon : '' });
+  });
+  return obs;
+}
+const OBSTACLES = buildObstacles();
+
 // GPS reference anchors to calibrate the blue "you are here" dot onto the map.
 // Least-squares affine fit (axis-aligned, north-up) computed from all campus
 // buildings with verified real GPS coordinates vs their traced markers, so the
@@ -1277,6 +1299,7 @@ const MARKERS = {
 const GPS_TO_NORM = { m11: 133.340544, b1: -16220.196369, m22: -175.957048, b2: 3229.424686 };
 
 function showMapFromAR() {
+  stopMinimap();
   if (dest) {
     // Switch to map view for current destination
     showMapView(dest);
@@ -1295,6 +1318,7 @@ function showMapFromAR() {
 }
 
 function showMapView(key) {
+  stopMinimap();
   mapDest = key;  const b = BUILDINGS[key];
 
   document.getElementById('map-view').classList.add('show');
@@ -1334,6 +1358,7 @@ function closeMapView() {
   document.getElementById('map-legend').classList.remove('show');
   document.getElementById('map-search-btn').classList.remove('show');
   stopMapRender();
+  startMinimap();
   const hadDest = mapDest;
   mapDest = null;
 
@@ -1479,7 +1504,7 @@ function recenterMap() {
     const n = gpsToNorm(gpsPos.lat, gpsPos.lng);
     centerOnNorm(n.x, n.y);
   } else {
-    centerOnNorm(KIOSK_POINT.x, KIOSK_POINT.y);
+    centerOnNorm(0.5, 0.5);
   }
 }
 
@@ -1518,11 +1543,11 @@ function renderMap(ts) {
     drawMapRoute(w, h, ts);
   }
 
+  // Draw obstacles (building footprints)
+  drawObstacles(w, h);
+
   // Draw building markers at their traced normalized positions
   drawBuildingMarkers(w, h, ts);
-
-  // Draw kiosk start marker
-  drawKioskMarker(w, h);
 
   // Draw GPS "you are here" dot
   drawUserPosition(w, h);
@@ -1545,43 +1570,39 @@ function renderMap(ts) {
   mapAnimFrame = requestAnimationFrame(renderMap);
 }
 
-function drawKioskMarker(w, h) {
-  const sx = nx(KIOSK_POINT.x, w, h);
-  const sy = ny(KIOSK_POINT.y, w, h);
-  if (sx < -40 || sx > w + 40 || sy < -40 || sy > h + 40) return;
+function drawObstacles(w, h) {
+  OBSTACLES.forEach(o => {
+    const sx = nx(o.x + o.w/2, w, h);
+    const sy = ny(o.y + o.h/2, w, h);
+    if (sx < -80 || sx > w + 80 || sy < -80 || sy > h + 80) return;
 
-  mapCtx.save();
-  // Outer glow
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 12, 0, Math.PI * 2);
-  mapCtx.fillStyle = 'rgba(41,121,255,0.2)';
-  mapCtx.fill();
-  // Dot
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 6.5, 0, Math.PI * 2);
-  mapCtx.fillStyle = '#ffffff';
-  mapCtx.fill();
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 4.5, 0, Math.PI * 2);
-  mapCtx.fillStyle = '#2979ff';
-  mapCtx.fill();
-  // Label badge
-  const label = 'Kiosk is here';
-  mapCtx.font = 'bold 10px -apple-system, BlinkMacSystemFont, sans-serif';
-  const tw = mapCtx.measureText(label).width;
-  const bx = sx + 10, by = sy - 12, bw = tw + 12, bh = 18;
-  mapCtx.fillStyle = 'rgba(255,255,255,0.95)';
-  mapCtx.strokeStyle = '#2979ff';
-  mapCtx.lineWidth = 1;
-  // rounded rect
-  mapCtx.beginPath();
-  mapCtx.roundRect(bx, by, bw, bh, 5);
-  mapCtx.fill();
-  mapCtx.stroke();
-  mapCtx.fillStyle = '#0b3d91';
-  mapCtx.textAlign = 'left';
-  mapCtx.fillText(label, bx + 6, by + 13);
-  mapCtx.restore();
+    const px = nx(o.x, w, h);
+    const py = ny(o.y, w, h);
+    const pw = Math.abs(nx(o.x + o.w, w, h) - px);
+    const ph = Math.abs(ny(o.y + o.h, w, h) - py);
+
+    mapCtx.save();
+    // Shadow
+    mapCtx.beginPath();
+    mapCtx.roundRect(px + 2, py + 3, pw, ph, 3);
+    mapCtx.fillStyle = 'rgba(0,0,0,0.30)';
+    mapCtx.fill();
+    // Building body
+    mapCtx.beginPath();
+    mapCtx.roundRect(px, py, pw, ph, 3);
+    mapCtx.fillStyle = '#4b5563';
+    mapCtx.fill();
+    mapCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+    mapCtx.lineWidth = 1;
+    mapCtx.stroke();
+    // Icon label (small)
+    mapCtx.fillStyle = 'rgba(255,255,255,0.85)';
+    mapCtx.font = 'bold 9px -apple-system, BlinkMacSystemFont, sans-serif';
+    mapCtx.textAlign = 'center';
+    mapCtx.textBaseline = 'middle';
+    mapCtx.fillText(o.icon, px + pw/2, py + ph/2);
+    mapCtx.restore();
+  });
 }
 
 function drawBuildingMarkers(w, h, ts) {
@@ -1765,6 +1786,199 @@ function drawMapRoute(w, h, ts) {
   mapCtx.restore();
 }
 
+/* ================================================================
+   MINI MAP (AR overlay, Google Maps style)
+   ================================================================ */
+function initMinimap() {
+  if (minimapReady) return;
+  minimapCanvas = document.getElementById('minimap-canvas');
+  minimapCtx = minimapCanvas.getContext('2d');
+  handleMinimapResize();
+  minimapReady = true;
+}
+
+function handleMinimapResize() {
+  if (!minimapCanvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const size = 118;
+  minimapCanvas.width = size * dpr;
+  minimapCanvas.height = size * dpr;
+  minimapCanvas.style.width = size + 'px';
+  minimapCanvas.style.height = size + 'px';
+  if (minimapCtx) minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function startMinimap() {
+  initMinimap();
+  const el = minimapCanvas;
+  if (el) el.style.display = 'block';
+  if (minimapAnimFrame) cancelAnimationFrame(minimapAnimFrame);
+  minimapAnimFrame = requestAnimationFrame(renderMinimap);
+}
+
+function stopMinimap() {
+  if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
+  if (minimapCanvas) minimapCanvas.style.display = 'none';
+}
+
+// Draw a simple polyline helper for the minimap (uses its own ctx)
+function minimapPolyline(ctx, pts) {
+  if (!pts || pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+
+// Normalized 0..1 -> minimap local px (centred, heading-up, scaled)
+function minimapPoint(nx0, ny0, cx, cy, scale, headingRad) {
+  let dx = nx0 - 0.5;
+  let dy = ny0 - 0.5;
+  const cos = Math.cos(headingRad), sin = Math.sin(headingRad);
+  // rotate to heading-up (north points forward/up)
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+  return { x: cx + rx * scale, y: cy + ry * scale };
+}
+
+function renderMinimap(ts) {
+  if (!minimapCtx || !minimapCanvas || !gpsPos) {
+    if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
+    return;
+  }
+
+  const size = 118;
+  const ctx = minimapCtx;
+  const cx = size / 2, cy = size / 2;
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Heading-up rotation
+  const headingRad = (heading * Math.PI) / 180;
+  const scale = 150; // px per unit of normalized distance
+
+  // User position in normalized coords
+  const user = gpsToNorm(gpsPos.lat, gpsPos.lng);
+
+  // Clip to rounded rect
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, 14);
+  ctx.clip();
+
+  // Background grid (subtle roads look)
+  ctx.fillStyle = 'rgba(15,23,42,0.6)';
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let g = -4; g <= 4; g++) {
+    const gx = cx + g * (scale / 6);
+    const gy = cy + g * (scale / 6);
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(size, gy); ctx.stroke();
+  }
+
+  // Obstacles (building footprints) in heading-up space
+  OBSTACLES.forEach(o => {
+    const p = minimapPoint(o.x + o.w/2, o.y + o.h/2, cx, cy, scale, headingRad);
+    // approximate footprint (ignore rotation for readability)
+    const pw = o.w * scale;
+    const ph = o.h * scale;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(-headingRad);
+    ctx.beginPath();
+    ctx.roundRect(-pw/2, -ph/2, pw, ph, 2);
+    ctx.fillStyle = 'rgba(107,114,128,0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Route: from user to destination (blue Google-Maps-like line)
+  const destMark = MARKERS[dest];
+  if (dest && destMark) {
+    const a = minimapPoint(user.x, user.y, cx, cy, scale, headingRad);
+    const b = minimapPoint(destMark[0], destMark[1], cx, cy, scale, headingRad);
+    // gentle S-curve so the path looks like a real route, not a straight shot
+    const midX = (a.x + b.x) / 2;
+    const midY = (a.y + b.y) / 2;
+    const cpx = midX - (b.y - a.y) * 0.25;
+    const cpy = midY + (b.x - a.x) * 0.25;
+    ctx.save();
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(cpx, cpy, b.x, b.y);
+    ctx.stroke();
+    // Direction arrowhead at destination end
+    const ang = Math.atan2(b.y - cpy, b.x - cpx);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - 9 * Math.cos(ang - 0.45), b.y - 9 * Math.sin(ang - 0.45));
+    ctx.lineTo(b.x - 9 * Math.cos(ang + 0.45), b.y - 9 * Math.sin(ang + 0.45));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Destination pin
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(b.x, b.y - 2, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (BUILDINGS[dest]) {
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 7px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(BUILDINGS[dest].icon, b.x, b.y - 2 + 1);
+    }
+    ctx.restore();
+  }
+
+  // User location dot (centre)
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(59,130,246,0.28)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#3b82f6';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // heading cone
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, 12, -0.5, 0.5);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(59,130,246,0.2)';
+  ctx.fill();
+  ctx.restore();
+
+  // North indicator (top-right)
+  ctx.save();
+  ctx.font = 'bold 9px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText('N ↑', size - 8, 14);
+  ctx.restore();
+
+  ctx.restore();
+
+  minimapAnimFrame = requestAnimationFrame(renderMinimap);
+}
+
 function startARNavigation() {
   if (!mapDest) return;
 
@@ -1802,6 +2016,7 @@ async function initCameraAndNavigate(key) {
 function enterARNavigation(key, wasNavigating) {
   mapDest = null;
   document.getElementById('topbar').style.display = 'flex';
+  startMinimap();
 
   if (wasNavigating) {
     // Already navigating, switch destination
@@ -1857,6 +2072,7 @@ window.addEventListener('beforeunload', () => {
   if (animFrame) cancelAnimationFrame(animFrame);
   stopGPS();
   stopCompass();
+  stopMinimap();
   scanning = false;
 });
 </script>
