@@ -1228,154 +1228,54 @@ let mapAnimFrame = null;
 let mapImg = null;
 let mapImgLoaded = false;
 
-// Campus GPS bounding box (covers all buildings with padding)
-const MAP_BOUNDS = {
-  latMin: 18.34720, latMax: 18.35160,
-  lngMin: 121.63920, lngMax: 121.64520
+// Map image aspect ratio (matches assets/csu_map.png => 1672 x 941)
+const MAP_ASPECT = 1672 / 941;
+
+// Kiosk START point (the kiosk's location on the map), normalized 0..1.
+// Every campus route begins here, exactly like the main kiosk app.
+const KIOSK_POINT = { x: 0.9307, y: 0.3782 };
+
+// Hand-traced routes (normalized 0..1 relative to csu_map.png), ported
+// verbatim from lib/data/campus_routes_data.dart so the web map shows the
+// SAME certified pathway lines as the main kiosk. Each array is a polyline
+// from the kiosk start to the building's end point.
+const ROUTES = {
+  'admin':       [[0.935,0.379],[0.9,0.374],[0.85,0.363],[0.8,0.35],[0.75,0.34],[0.7,0.328],[0.67,0.319],[0.64,0.304],[0.634,0.33],[0.63,0.363],[0.65,0.372],[0.662,0.377],[0.66,0.4],[0.671,0.414]],
+  'cte':         [[0.931,0.382],[0.878,0.367],[0.823,0.353],[0.768,0.338],[0.713,0.324],[0.658,0.309],[0.604,0.294],[0.549,0.28],[0.494,0.265],[0.439,0.248],[0.391,0.237],[0.375,0.231]],
+  'gymplex':     [[0.9325,0.3782],[0.8962,0.3684],[0.86,0.3586],[0.8237,0.3489],[0.7874,0.3391],[0.7512,0.3293],[0.7149,0.3195],[0.7179,0.2889],[0.7208,0.2582],[0.7238,0.2276],[0.7161,0.2142],[0.7083,0.2007]],
+  'gatchalian':  [[0.9304,0.3782],[0.8944,0.3682],[0.8583,0.3582],[0.8223,0.3482],[0.7863,0.3382],[0.7502,0.3282],[0.7142,0.3182],[0.7176,0.2876],[0.7211,0.257],[0.7245,0.2264],[0.7398,0.2302],[0.7551,0.234]],
+  'cics':        [[0.9307,0.3782],[0.8942,0.3694],[0.858,0.3606],[0.8218,0.3518],[0.7856,0.343],[0.7493,0.3342],[0.7507,0.3191],[0.7522,0.304]],
+  'library':     [[0.9302,0.3781],[0.8917,0.3689],[0.8532,0.3598],[0.8147,0.3506],[0.7763,0.3414],[0.7378,0.3323],[0.6993,0.3231],[0.6608,0.3139]],
+  'avr':         [[0.9311,0.377],[0.8914,0.3674],[0.8518,0.3579],[0.8121,0.3483],[0.7725,0.3388],[0.7328,0.3292],[0.7308,0.3406],[0.7287,0.3519]],
+  'canteen':     [[0.9311,0.3764],[0.8858,0.3649],[0.8405,0.3533],[0.7953,0.3418],[0.75,0.3303],[0.7047,0.3187],[0.6594,0.3072],[0.6647,0.275],[0.67,0.2427],[0.6753,0.2105],[0.6657,0.1854],[0.656,0.1603]],
+  'cit':         [[0.9304,0.377],[0.8807,0.3635],[0.8309,0.3501],[0.7812,0.3366],[0.7314,0.3232],[0.6816,0.3097],[0.6319,0.2962],[0.5821,0.2828],[0.5324,0.2693],[0.5333,0.2546],[0.5341,0.2399]],
+  'cbea':        [[0.9304,0.377],[0.8776,0.3629],[0.8249,0.3489],[0.7721,0.3348],[0.7194,0.3207],[0.6666,0.3066],[0.6139,0.2926],[0.5611,0.2785],[0.5083,0.2644],[0.5028,0.2399],[0.4972,0.2154]],
+  'infra':       [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3365,0.1903],[0.3423,0.1652],[0.327,0.1591],[0.3116,0.153]],
+  'dnst':        [[0.9304,0.3758],[0.8704,0.3598],[0.8104,0.3437],[0.7505,0.3277],[0.6905,0.3116],[0.6305,0.2956],[0.5705,0.2796],[0.5105,0.2635],[0.4506,0.2475],[0.3906,0.2314],[0.3306,0.2154],[0.3441,0.1718],[0.3577,0.1281],[0.3712,0.0845],[0.3874,0.0579],[0.4036,0.0312]],
+  'oldadmin':    [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3159,0.2285],[0.3012,0.2415],[0.2865,0.2546]],
+  'hatchery':    [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3204,0.2567],[0.3103,0.298],[0.3001,0.3393],[0.2899,0.3806],[0.2607,0.3733],[0.2314,0.366],[0.2283,0.3776],[0.2252,0.3892]],
+  'icrm':        [[0.9305,0.377],[0.8717,0.3609],[0.8128,0.3449],[0.754,0.3288],[0.6951,0.3128],[0.6363,0.2967],[0.6277,0.3577],[0.6192,0.4186],[0.6106,0.4796],[0.5671,0.4663],[0.5237,0.453],[0.4802,0.4397],[0.4367,0.4264],[0.4322,0.4438],[0.4277,0.4611],[0.4388,0.4611]],
+  'ceo_cottage': [[0.9305,0.377],[0.8717,0.3609],[0.8128,0.3449],[0.754,0.3288],[0.6951,0.3128],[0.6363,0.2967],[0.6277,0.3577],[0.6192,0.4186],[0.6106,0.4796],[0.5692,0.4673],[0.5278,0.4549],[0.5219,0.4833],[0.516,0.5117],[0.5035,0.5068]],
+  'villa1':      [[0.9302,0.3761],[0.8714,0.3602],[0.8126,0.3443],[0.7538,0.3283],[0.695,0.3124],[0.6363,0.2967],[0.6277,0.3576],[0.6191,0.4185],[0.6106,0.4796],[0.5692,0.4672],[0.5278,0.4549],[0.5175,0.469]],
+  'dorm':        [[0.9312,0.377],[0.8722,0.3609],[0.8132,0.3449],[0.7543,0.3288],[0.6953,0.3128],[0.6363,0.2967],[0.6286,0.351],[0.6212,0.4042],[0.6137,0.4573],[0.6106,0.4796],[0.6154,0.5105]]
 };
 
-// Campus route waypoints for drawing paths between buildings
-// These define the main campus road network as connected segments
-const CAMPUS_ROADS = [
-  // Main entrance gate area
-  {from:'gate', lat:18.34880, lng:121.64040},
-  // Main road westward
-  {from:'road1', lat:18.34890, lng:121.64090},
-  {from:'road2', lat:18.34900, lng:121.64150},
-  {from:'road3', lat:18.34910, lng:121.64200},
-  {from:'road4', lat:18.34920, lng:121.64250},
-  {from:'road5', lat:18.34930, lng:121.64300},
-  {from:'road6', lat:18.34940, lng:121.64350},
-  {from:'road7', lat:18.34950, lng:121.64400},
-  // North branch
-  {from:'north1', lat:18.34950, lng:121.64000},
-  {from:'north2', lat:18.34980, lng:121.64020},
-  {from:'north3', lat:18.35010, lng:121.64050},
-  {from:'north4', lat:18.35040, lng:121.64080},
-  // South branch
-  {from:'south1', lat:18.34840, lng:121.64100},
-  {from:'south2', lat:18.34800, lng:121.64150},
-  {from:'south3', lat:18.34780, lng:121.64200},
-  // West extension
-  {from:'west1', lat:18.34960, lng:121.64350},
-  {from:'west2', lat:18.34980, lng:121.64400},
-  {from:'west3', lat:18.35020, lng:121.64420},
-  {from:'west4', lat:18.35050, lng:121.64440},
-  // Hilltop path
-  {from:'hill1', lat:18.35050, lng:121.64380},
-  {from:'hill2', lat:18.35080, lng:121.64400},
-  {from:'hill3', lat:18.35100, lng:121.64400},
-  // Southwest path
-  {from:'sw1', lat:18.34840, lng:121.64300},
-  {from:'sw2', lat:18.34800, lng:121.64350},
-  {from:'sw3', lat:18.34780, lng:121.64280},
-];
+// Building marker points (normalized 0..1), same as kiosk markerPoint.
+const MARKERS = {
+  'admin':[0.671,0.414], 'cte':[0.377,0.184], 'gymplex':[0.7181,0.1420],
+  'gatchalian':[0.7695,0.2093], 'cics':[0.7769,0.2962], 'library':[0.6557,0.3415],
+  'avr':[0.7259,0.3660], 'canteen':[0.6501,0.1273], 'cit':[0.5386,0.2105],
+  'cbea':[0.4752,0.1958], 'infra':[0.2982,0.1567], 'dnst':[0.4249,0.0453],
+  'oldadmin':[0.2659,0.2350], 'hatchery':[0.2225,0.4088], 'icrm':[0.4555,0.4722],
+  'ceo_cottage':[0.4937,0.5105], 'villa1':[0.5058,0.4543], 'dorm':[0.6286,0.5179]
+};
 
-// Route generation: find shortest path through road network to destination
-function generateRoutePath(fromLat, fromLng, toLat, toLng) {
-  const points = [];
-
-  // Start from user's current position
-  points.push({lat: fromLat, lng: fromLng});
-
-  // Find nearest road node to start
-  const nearestStart = findNearestRoadNode(fromLat, fromLng);
-  // Find nearest road node to destination
-  const nearestDest = findNearestRoadNode(toLat, toLng);
-
-  // Build a connection from user position to nearest road node
-  if (nearestStart.lat !== fromLat || nearestStart.lng !== fromLng) {
-    points.push({lat: nearestStart.lat, lng: nearestStart.lng});
-  }
-
-  // Build the road path along the main road between start and dest nodes
-  const roadPath = buildRoadPath(
-    nearestStart.lat, nearestStart.lng,
-    nearestDest.lat, nearestDest.lng
-  );
-  roadPath.forEach(p => points.push(p));
-
-  // Connect to destination
-  if (nearestDest.lat !== toLat || nearestDest.lng !== toLng) {
-    points.push({lat: toLat, lng: toLng});
-  }
-
-  // De-duplicate consecutive points that are too close
-  return dedupePoints(points, 0.00001);
-}
-
-function findNearestRoadNode(lat, lng) {
-  let best = CAMPUS_ROADS[0], bestD = Infinity;
-  for (const n of CAMPUS_ROADS) {
-    const d = haversine(lat, lng, n.lat, n.lng);
-    if (d < bestD) { bestD = d; best = n; }
-  }
-  return best;
-}
-
-function buildRoadPath(fromLat, fromLng, toLat, toLng) {
-  // Build an ordered path through road nodes from start to dest
-  // Simple approach: order road nodes by proximity along a known axis
-  const fromLngRef = fromLng, toLngRef = toLng;
-  const fromLatRef = fromLat, toLatRef = toLat;
-
-  // Select road nodes that fall within the corridor between start and dest
-  const lngMin = Math.min(fromLngRef, toLngRef) - 0.0005;
-  const lngMax = Math.max(fromLngRef, toLngRef) + 0.0005;
-  const latMin = Math.min(fromLatRef, toLatRef) - 0.0005;
-  const latMax = Math.max(fromLatRef, toLatRef) + 0.0005;
-
-  // Collect nodes in the corridor and order by a monotonic sweep
-  // that mirrors the main movement direction
-  const corridorNodes = CAMPUS_ROADS.filter(n =>
-    n.lng >= lngMin && n.lng <= lngMax &&
-    n.lat >= latMin && n.lat <= latMax
-  );
-
-  if (corridorNodes.length === 0) {
-    // Fallback: go straight
-    return [{lat: fromLat, lng: fromLng}, {lat: toLat, lng: toLng}];
-  }
-
-  // Determine dominant direction for ordering
-  const dLat = toLatRef - fromLatRef;
-  const dLng = toLngRef - fromLngRef;
-
-  // Sort by progress along the dominant axis, then perpendicular
-  const useLng = Math.abs(dLng) >= Math.abs(dLat);
-  corridorNodes.sort((a, b) => {
-    if (useLng) {
-      return (a.lng - fromLngRef) - (b.lng - fromLngRef);
-    }
-    // For lat-dominant (north/south), order by lat distance to dest
-    return Math.abs(a.lat - toLatRef) - Math.abs(b.lat - toLatRef);
-  });
-
-  // Build smoother path with intermediate nodes
-  const result = [];
-  if (useLng) {
-    // East-west movement: add each corridor node sorted by longitude
-    result.push(...corridorNodes.map(n => ({lat: n.lat, lng: n.lng})));
-  } else {
-    // North-south movement
-    result.push(...corridorNodes.map(n => ({lat: n.lat, lng: n.lng})));
-  }
-
-  // Ensure we don't have extreme jumps — simplify by keeping nodes in order
-  return result;
-}
-
-function dedupePoints(pts, minDist) {
-  if (pts.length < 2) return pts;
-  const out = [pts[0]];
-  for (let i = 1; i < pts.length; i++) {
-    const last = out[out.length - 1];
-    if (haversine(last.lat, last.lng, pts[i].lat, pts[i].lng) > minDist) {
-      out.push(pts[i]);
-    }
-  }
-  return out;
-}
+// GPS reference anchors to calibrate the blue "you are here" dot onto the map.
+// Computed affine transform (axis-aligned, north-up) derived from two known
+// campus anchors so GPS coordinates land on the SAME traced map positions.
+//   - CICS  : gps~(18.3493, 121.6412) => marker (0.7769, 0.2962)
+//   - Admin : gps~(18.3489, 121.6409) => marker (0.6710, 0.4140)
+const GPS_TO_NORM = { m11: 353.0, b1: -42938.5667, m22: -294.5, b2: 5404.16505 };
 
 function showMapFromAR() {
   if (dest) {
@@ -1391,7 +1291,7 @@ function showMapFromAR() {
     document.getElementById('topbar').style.display = 'none';
     initMapCanvas();
     startMapRender();
-    if (gpsPos) recenterMap();
+    recenterMap();
   }
 }
 
@@ -1449,6 +1349,10 @@ function closeMapView() {
 }
 
 function initMapCanvas() {
+  if (mapReady) {
+    handleMapResize();
+    return;
+  }
   mapCanvas = document.getElementById('map-canvas');
   mapCtx = mapCanvas.getContext('2d');
   handleMapResize();
@@ -1510,49 +1414,78 @@ function setupMapDrag() {
   el.addEventListener('wheel', e => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    mapZoom = Math.max(0.5, Math.min(3, mapZoom + delta));
+    mapZoom = Math.max(0.5, Math.min(4, mapZoom + delta));
   }, {passive:false});
+}
+
+// Compute the displayed rect of the map image (preserves aspect ratio).
+// The image is fitted to the screen and then scaled by mapZoom and panned
+// by mapOffset. Normalized (0..1) route coords map onto this rect exactly.
+function getMapRect(w, h) {
+  let baseW = w * 0.95;
+  let baseH = baseW / MAP_ASPECT;
+  if (baseH > h * 0.95) {
+    baseH = h * 0.95;
+    baseW = baseH * MAP_ASPECT;
+  }
+  const rectW = baseW * mapZoom;
+  const rectH = baseH * mapZoom;
+  const centerX = w / 2 + mapOffset.x;
+  const centerY = h / 2 + mapOffset.y;
+  return {
+    x: centerX - rectW / 2,
+    y: centerY - rectH / 2,
+    w: rectW,
+    h: rectH
+  };
+}
+
+// Normalized (0..1) map coords -> screen px
+function nx(nx, w, h) {
+  const r = getMapRect(w, h);
+  return r.x + nx * r.w;
+}
+function ny(ny, w, h) {
+  const r = getMapRect(w, h);
+  return r.y + ny * r.h;
+}
+
+// GPS -> normalized map coords (affine calibration to traced anchors)
+function gpsToNorm(lat, lng) {
+  const x = GPS_TO_NORM.m11 * lng + GPS_TO_NORM.b1;
+  const y = GPS_TO_NORM.m22 * lat + GPS_TO_NORM.b2;
+  return { x, y };
+}
+
+function centerOnNorm(x, y) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const sx = nx(x, w, h);
+  const sy = ny(y, w, h);
+  mapOffset.x += (w / 2 - sx);
+  mapOffset.y += (h / 2 - sy);
+  mapLastOffset = {...mapOffset};
 }
 
 function centerMapOnDest() {
   if (!mapDest || !mapCanvas) return;
-  const b = BUILDINGS[mapDest];
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const px = gpsToMapX(b.lat, b.lng, w);
-  const py = gpsToMapY(b.lat, b.lng, h);
-  mapOffset.x = w / 2 - px;
-  mapOffset.y = h / 2 - py;
-  mapLastOffset = {...mapOffset};
+  const m = MARKERS[mapDest];
+  if (m) centerOnNorm(m[0], m[1]);
 }
 
 function recenterMap() {
-  if (mapDest) {
+  if (mapDest && MARKERS[mapDest]) {
     centerMapOnDest();
   } else if (gpsPos) {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const px = gpsToMapX(gpsPos.lat, gpsPos.lng, w);
-    const py = gpsToMapY(gpsPos.lat, gpsPos.lng, h);
-    mapOffset.x = w / 2 - px;
-    mapOffset.y = h / 2 - py;
-    mapLastOffset = {...mapOffset};
+    const n = gpsToNorm(gpsPos.lat, gpsPos.lng);
+    centerOnNorm(n.x, n.y);
+  } else {
+    centerOnNorm(KIOSK_POINT.x, KIOSK_POINT.y);
   }
 }
 
 function zoomMap(delta) {
   mapZoom = Math.max(0.5, Math.min(4, mapZoom + delta));
-}
-
-function gpsToMapX(lat, lng, canvasW) {
-  const lngFrac = (lng - MAP_BOUNDS.lngMin) / (MAP_BOUNDS.lngMax - MAP_BOUNDS.lngMin);
-  return (canvasW * 0.1 + lngFrac * canvasW * 0.8) * mapZoom + mapOffset.x;
-}
-
-function gpsToMapY(lat, lng, canvasH) {
-  const latFrac = (lat - MAP_BOUNDS.latMin) / (MAP_BOUNDS.latMax - MAP_BOUNDS.latMin);
-  // Invert Y because lat increases north but canvas Y increases south
-  return (canvasH * 0.9 - latFrac * canvasH * 0.8) * mapZoom + mapOffset.y;
 }
 
 function startMapRender() {
@@ -1570,58 +1503,35 @@ function renderMap(ts) {
   const h = window.innerHeight;
 
   mapCtx.clearRect(0, 0, w, h);
-
-  // Background
-  mapCtx.fillStyle = '#1a2332';
+  mapCtx.fillStyle = '#111827';
   mapCtx.fillRect(0, 0, w, h);
 
-  // Draw campus map image if loaded
+  // Draw the campus map image into the fitted rect
   if (mapImgLoaded && mapImg) {
+    const r = getMapRect(w, h);
     mapCtx.save();
-    const imgAspect = mapImg.width / mapImg.height;
-    let drawW, drawH, drawX, drawY;
-
-    // Map the image to cover the campus GPS bounds area
-    const lngFrac = (MAP_BOUNDS.lngMax - MAP_BOUNDS.lngMin) / (MAP_BOUNDS.lngMax - MAP_BOUNDS.lngMin);
-    const baseW = w * 0.8 * mapZoom;
-    const baseH = baseW / imgAspect;
-    drawW = baseW;
-    drawH = baseH;
-    drawX = (w * 0.1) * mapZoom + mapOffset.x;
-    drawY = (h * 0.9 - baseH / (h * 0.8) * h * 0.8) * mapZoom + mapOffset.y;
-
-    // Simpler: center image on map area
-    const centerX = w / 2 + mapOffset.x;
-    const centerY = h / 2 + mapOffset.y;
-    drawW = w * mapZoom;
-    drawH = drawW / imgAspect;
-    drawX = centerX - drawW / 2;
-    drawY = centerY - drawH / 2;
-
-    mapCtx.globalAlpha = 0.35;
-    mapCtx.drawImage(mapImg, drawX, drawY, drawW, drawH);
-    mapCtx.globalAlpha = 1;
+    mapCtx.drawImage(mapImg, r.x, r.y, r.w, r.h);
     mapCtx.restore();
   }
 
-  // Draw grid for spatial reference
-  drawMapGrid(w, h);
-
-  // Draw route path if destination is set
-  if (mapDest) {
-    drawMapRoute(w, h);
+  // Draw route path (traced, from kiosk start -> destination)
+  if (mapDest && ROUTES[mapDest]) {
+    drawMapRoute(w, h, ts);
   }
 
-  // Draw building markers
+  // Draw building markers at their traced normalized positions
   drawBuildingMarkers(w, h, ts);
 
-  // Draw user position
+  // Draw kiosk start marker
+  drawKioskMarker(w, h);
+
+  // Draw GPS "you are here" dot
   drawUserPosition(w, h);
 
-  // Draw GPS waiting prompt if no location yet
+  // GPS waiting prompt
   if (!gpsPos) {
     mapCtx.save();
-    mapCtx.fillStyle = 'rgba(0,0,0,0.5)';
+    mapCtx.fillStyle = 'rgba(0,0,0,0.45)';
     mapCtx.fillRect(0, 0, w, h);
     mapCtx.fillStyle = '#fff';
     mapCtx.textAlign = 'center';
@@ -1629,106 +1539,113 @@ function renderMap(ts) {
     mapCtx.fillText('📡 Acquiring your location...', w / 2, h / 2 - 10);
     mapCtx.fillStyle = 'rgba(255,255,255,0.6)';
     mapCtx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    mapCtx.fillText('Kiosk campus area', w / 2, h / 2 + 14);
+    mapCtx.fillText('Your location marker will appear here', w / 2, h / 2 + 14);
     mapCtx.restore();
   }
 
   mapAnimFrame = requestAnimationFrame(renderMap);
 }
 
-function drawMapGrid(w, h) {
+function drawKioskMarker(w, h) {
+  const sx = nx(KIOSK_POINT.x, w, h);
+  const sy = ny(KIOSK_POINT.y, w, h);
+  if (sx < -40 || sx > w + 40 || sy < -40 || sy > h + 40) return;
+
   mapCtx.save();
-  mapCtx.strokeStyle = 'rgba(255,255,255,0.04)';
+  // Outer glow
+  mapCtx.beginPath();
+  mapCtx.arc(sx, sy, 12, 0, Math.PI * 2);
+  mapCtx.fillStyle = 'rgba(41,121,255,0.2)';
+  mapCtx.fill();
+  // Dot
+  mapCtx.beginPath();
+  mapCtx.arc(sx, sy, 6.5, 0, Math.PI * 2);
+  mapCtx.fillStyle = '#ffffff';
+  mapCtx.fill();
+  mapCtx.beginPath();
+  mapCtx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+  mapCtx.fillStyle = '#2979ff';
+  mapCtx.fill();
+  // Label badge
+  const label = 'Kiosk is here';
+  mapCtx.font = 'bold 10px -apple-system, BlinkMacSystemFont, sans-serif';
+  const tw = mapCtx.measureText(label).width;
+  const bx = sx + 10, by = sy - 12, bw = tw + 12, bh = 18;
+  mapCtx.fillStyle = 'rgba(255,255,255,0.95)';
+  mapCtx.strokeStyle = '#2979ff';
   mapCtx.lineWidth = 1;
-
-  // Draw subtle grid lines
-  const gridSpacing = 60 * mapZoom;
-  const offsetX = mapOffset.x % gridSpacing;
-  const offsetY = mapOffset.y % gridSpacing;
-
-  for (let x = offsetX; x < w; x += gridSpacing) {
-    mapCtx.beginPath();
-    mapCtx.moveTo(x, 0);
-    mapCtx.lineTo(x, h);
-    mapCtx.stroke();
-  }
-  for (let y = offsetY; y < h; y += gridSpacing) {
-    mapCtx.beginPath();
-    mapCtx.moveTo(0, y);
-    mapCtx.lineTo(w, y);
-    mapCtx.stroke();
-  }
+  // rounded rect
+  mapCtx.beginPath();
+  mapCtx.roundRect(bx, by, bw, bh, 5);
+  mapCtx.fill();
+  mapCtx.stroke();
+  mapCtx.fillStyle = '#0b3d91';
+  mapCtx.textAlign = 'left';
+  mapCtx.fillText(label, bx + 6, by + 13);
   mapCtx.restore();
 }
 
 function drawBuildingMarkers(w, h, ts) {
-  Object.entries(BUILDINGS).forEach(([key, b]) => {
-    const px = gpsToMapX(b.lat, b.lng, w);
-    const py = gpsToMapY(b.lat, b.lng, h);
-
-    // Skip if off screen
-    if (px < -50 || px > w + 50 || py < -50 || py > h + 50) return;
-
+  Object.entries(MARKERS).forEach(([key, m]) => {
+    const sx = nx(m[0], w, h);
+    const sy = ny(m[1], w, h);
+    if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) return;
+    const b = BUILDINGS[key];
     const isDest = key === mapDest;
 
-    // Building dot
     mapCtx.save();
     if (isDest) {
-      // Destination: larger red pin
-      // Pin shadow
+      // Destination pin (tip at marker point)
+      // shadow
       mapCtx.beginPath();
-      mapCtx.ellipse(px, py + 18, 8, 3, 0, 0, Math.PI * 2);
+      mapCtx.ellipse(sx, sy + 16, 8, 3, 0, 0, Math.PI * 2);
       mapCtx.fillStyle = 'rgba(0,0,0,0.25)';
       mapCtx.fill();
-
-      // Pin body
+      // pin body
       mapCtx.beginPath();
-      mapCtx.moveTo(px, py + 16);
-      mapCtx.bezierCurveTo(px - 10, py, px - 10, py - 14, px, py - 16);
-      mapCtx.bezierCurveTo(px + 10, py - 14, px + 10, py, px, py + 16);
+      mapCtx.moveTo(sx, sy + 16);
+      mapCtx.bezierCurveTo(sx - 11, sy, sx - 11, sy - 14, sx, sy - 16);
+      mapCtx.bezierCurveTo(sx + 11, sy - 14, sx + 11, sy, sx, sy + 16);
       mapCtx.closePath();
       mapCtx.fillStyle = '#ef4444';
       mapCtx.fill();
       mapCtx.strokeStyle = '#fff';
       mapCtx.lineWidth = 2;
       mapCtx.stroke();
-
-      // Inner circle
+      // inner circle
       mapCtx.beginPath();
-      mapCtx.arc(px, py - 4, 5, 0, Math.PI * 2);
+      mapCtx.arc(sx, sy - 4, 5, 0, Math.PI * 2);
       mapCtx.fillStyle = '#fff';
       mapCtx.fill();
-
-      // Pulsing ring animation
-      const pulsePhase = ((ts / 1000) % 2) / 2;
-      const pulseR = 16 + pulsePhase * 20;
-      const pulseA = (1 - pulsePhase) * 0.4;
+      // pulsing ring
+      const phase = ((ts / 1000) % 2) / 2;
       mapCtx.beginPath();
-      mapCtx.arc(px, py - 4, pulseR, 0, Math.PI * 2);
-      mapCtx.strokeStyle = 'rgba(239,68,68,' + pulseA + ')';
+      mapCtx.arc(sx, sy - 4, 14 + phase * 22, 0, Math.PI * 2);
+      mapCtx.strokeStyle = 'rgba(239,68,68,' + ((1 - phase) * 0.4) + ')';
       mapCtx.lineWidth = 2;
       mapCtx.stroke();
-
-      // Label
-      mapCtx.fillStyle = '#fff';
-      mapCtx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
-      mapCtx.textAlign = 'center';
-      mapCtx.fillText(b.icon + ' ' + b.name, px, py - 26);
+      // label
+      if (b) {
+        mapCtx.fillStyle = '#fff';
+        mapCtx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+        mapCtx.textAlign = 'center';
+        mapCtx.fillText(b.icon + ' ' + b.name, sx, sy - 26);
+      }
     } else {
-      // Regular building: small gray dot
+      // regular building small dot at traced marker
       mapCtx.beginPath();
-      mapCtx.arc(px, py, 5, 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(148,163,184,0.7)';
+      mapCtx.arc(sx, sy, 5, 0, Math.PI * 2);
+      mapCtx.fillStyle = 'rgba(148,163,184,0.65)';
       mapCtx.fill();
-      mapCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+      mapCtx.strokeStyle = 'rgba(0,0,0,0.4)';
       mapCtx.lineWidth = 1;
       mapCtx.stroke();
-
-      // Small label
-      mapCtx.fillStyle = 'rgba(255,255,255,0.5)';
-      mapCtx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
-      mapCtx.textAlign = 'center';
-      mapCtx.fillText(b.icon + ' ' + b.name, px, py - 10);
+      if (b && mapZoom >= 1.2) {
+        mapCtx.fillStyle = 'rgba(255,255,255,0.55)';
+        mapCtx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+        mapCtx.textAlign = 'center';
+        mapCtx.fillText(b.icon + ' ' + b.name, sx, sy - 10);
+      }
     }
     mapCtx.restore();
   });
@@ -1736,131 +1653,114 @@ function drawBuildingMarkers(w, h, ts) {
 
 function drawUserPosition(w, h) {
   if (!gpsPos) return;
-
-  const px = gpsToMapX(gpsPos.lat, gpsPos.lng, w);
-  const py = gpsToMapY(gpsPos.lat, gpsPos.lng, h);
+  const n = gpsToNorm(gpsPos.lat, gpsPos.lng);
+  const sx = nx(n.x, w, h);
+  const sy = ny(n.y, w, h);
+  if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) return;
 
   mapCtx.save();
 
   // Accuracy circle
   if (gpsPos.acc) {
-    const accPx = (gpsPos.acc / 111000) * w * 0.8 * mapZoom;
+    const accPx = (gpsPos.acc / 111000) * (getMapRect(w, h).w);
     mapCtx.beginPath();
-    mapCtx.arc(px, py, accPx, 0, Math.PI * 2);
-    mapCtx.fillStyle = 'rgba(59,130,246,0.08)';
+    mapCtx.arc(sx, sy, Math.max(12, accPx), 0, Math.PI * 2);
+    mapCtx.fillStyle = 'rgba(59,130,246,0.10)';
     mapCtx.fill();
-    mapCtx.strokeStyle = 'rgba(59,130,246,0.15)';
+    mapCtx.strokeStyle = 'rgba(59,130,246,0.18)';
     mapCtx.lineWidth = 1;
     mapCtx.stroke();
   }
 
-  // Blue dot outer glow
+  // Outer glow
   mapCtx.beginPath();
-  mapCtx.arc(px, py, 12, 0, Math.PI * 2);
-  mapCtx.fillStyle = 'rgba(59,130,246,0.2)';
+  mapCtx.arc(sx, sy, 12, 0, Math.PI * 2);
+  mapCtx.fillStyle = 'rgba(59,130,246,0.25)';
   mapCtx.fill();
-
   // Blue dot
   mapCtx.beginPath();
-  mapCtx.arc(px, py, 7, 0, Math.PI * 2);
+  mapCtx.arc(sx, sy, 7, 0, Math.PI * 2);
   mapCtx.fillStyle = '#3b82f6';
   mapCtx.fill();
   mapCtx.strokeStyle = '#fff';
   mapCtx.lineWidth = 2.5;
   mapCtx.stroke();
-
-  // Inner white dot
+  // Inner white
   mapCtx.beginPath();
-  mapCtx.arc(px, py, 2.5, 0, Math.PI * 2);
+  mapCtx.arc(sx, sy, 2.5, 0, Math.PI * 2);
   mapCtx.fillStyle = '#fff';
   mapCtx.fill();
-
-  // Heading indicator (if compass available)
+  // Heading indicator
   if (heading > 0) {
     const headRad = (heading * Math.PI) / 180;
-    const dirLen = 22;
     mapCtx.beginPath();
-    mapCtx.moveTo(px, py);
-    mapCtx.lineTo(px + Math.sin(headRad) * dirLen, py - Math.cos(headRad) * dirLen);
+    mapCtx.moveTo(sx, sy);
+    mapCtx.lineTo(sx + Math.sin(headRad) * 22, sy - Math.cos(headRad) * 22);
     mapCtx.strokeStyle = 'rgba(59,130,246,0.5)';
     mapCtx.lineWidth = 2;
     mapCtx.stroke();
   }
-
-  // "You are here" label
+  // Label
   mapCtx.fillStyle = '#3b82f6';
   mapCtx.font = 'bold 10px -apple-system, BlinkMacSystemFont, sans-serif';
   mapCtx.textAlign = 'center';
-  mapCtx.fillText('You are here', px, py - 18);
+  mapCtx.fillText('You are here', sx, sy - 18);
 
   mapCtx.restore();
 }
 
-function drawMapRoute(w, h) {
-  if (!mapDest || !gpsPos) return;
+function drawMapRoute(w, h, ts) {
+  const pts = ROUTES[mapDest];
+  if (!pts || pts.length < 2) return;
 
-  const b = BUILDINGS[mapDest];
-  const route = generateRoutePath(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-
-  if (route.length < 2) return;
+  const screenPts = pts.map(p => ({ x: nx(p[0], w, h), y: ny(p[1], w, h) }));
 
   mapCtx.save();
 
-  // Draw route shadow
+  // Shadow/outline
   mapCtx.beginPath();
-  route.forEach((pt, i) => {
-    const px = gpsToMapX(pt.lat, pt.lng, w);
-    const py = gpsToMapY(pt.lat, pt.lng, h);
-    if (i === 0) mapCtx.moveTo(px, py);
-    else mapCtx.lineTo(px, py);
+  screenPts.forEach((p, i) => {
+    if (i === 0) mapCtx.moveTo(p.x, p.y);
+    else mapCtx.lineTo(p.x, p.y);
   });
-  mapCtx.strokeStyle = 'rgba(0,0,0,0.3)';
-  mapCtx.lineWidth = 7;
+  mapCtx.strokeStyle = 'rgba(0,0,0,0.35)';
+  mapCtx.lineWidth = 8;
   mapCtx.lineCap = 'round';
   mapCtx.lineJoin = 'round';
   mapCtx.stroke();
 
-  // Draw route line (animated dashed)
+  // Animated green route line (same colour/style as kiosk walking route)
   mapCtx.beginPath();
-  route.forEach((pt, i) => {
-    const px = gpsToMapX(pt.lat, pt.lng, w);
-    const py = gpsToMapY(pt.lat, pt.lng, h);
-    if (i === 0) mapCtx.moveTo(px, py);
-    else mapCtx.lineTo(px, py);
+  screenPts.forEach((p, i) => {
+    if (i === 0) mapCtx.moveTo(p.x, p.y);
+    else mapCtx.lineTo(p.x, p.y);
   });
   mapCtx.strokeStyle = '#22c55e';
   mapCtx.lineWidth = 4;
   mapCtx.lineCap = 'round';
   mapCtx.lineJoin = 'round';
-  // Animated dash
   const dashOffset = (Date.now() / 50) % 20;
   mapCtx.setLineDash([10, 10]);
   mapCtx.lineDashOffset = -dashOffset;
   mapCtx.stroke();
   mapCtx.setLineDash([]);
 
-  // Draw walking dots along route
+  // Walking dots
   const dotSpacing = 40;
-  let accumDist = 0;
-  for (let i = 1; i < route.length; i++) {
-    const p1x = gpsToMapX(route[i-1].lat, route[i-1].lng, w);
-    const p1y = gpsToMapY(route[i-1].lat, route[i-1].lng, h);
-    const p2x = gpsToMapX(route[i].lat, route[i].lng, w);
-    const p2y = gpsToMapY(route[i].lat, route[i].lng, h);
-    const segLen = Math.sqrt((p2x-p1x)**2 + (p2y-p1y)**2);
-
-    let d = accumDist % dotSpacing;
+  let accum = 0;
+  for (let i = 1; i < screenPts.length; i++) {
+    const p1 = screenPts[i - 1], p2 = screenPts[i];
+    const segLen = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+    let d = (dotSpacing - (accum % dotSpacing)) % dotSpacing;
     while (d < segLen) {
       const frac = d / segLen;
-      const dx = p1x + (p2x - p1x) * frac;
-      const dy = p1y + (p2y - p1y) * frac;
       mapCtx.beginPath();
-      mapCtx.arc(dx, dy, 2.5, 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(255,255,255,0.5)';
+      mapCtx.arc(p1.x + (p2.x - p1.x) * frac, p1.y + (p2.y - p1.y) * frac, 2.5, 0, Math.PI * 2);
+      mapCtx.fillStyle = 'rgba(255,255,255,0.6)';
       mapCtx.fill();
       d += dotSpacing;
     }
-    accumDist += segLen;
+    accum += segLen;
   }
 
   mapCtx.restore();
