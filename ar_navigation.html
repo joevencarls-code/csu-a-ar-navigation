@@ -305,19 +305,19 @@ const BUILDINGS = {
   gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.352466469429963, lng:121.65024244013327,
     steps:['Start at the main entrance','Walk west on the main road','Turn right at the road junction','Gymplex is straight ahead'],
     aliases:['gymplex','gym','gymnasium','sports','basketball'] },
-  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.3523320, lng:121.6469930,
+  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352341893509394, lng:121.65059449475766,
     steps:['Start at the main entrance','Walk west on the main road','Turn right at the junction','Turn right again after the Gymplex','Gatchalian Building is on your left'],
     aliases:['gatchalian','hall'] },
-  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'160m', time:'~2 min', lat:18.3518225, lng:121.6505661,
+  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'160m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
     steps:['Start at the main entrance','Walk west on the main road','Turn right before the Gymplex junction','CICS Building is on your left'],
     aliases:['cics','computer','it','information','computing','technology'] },
-  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'215m', time:'~3 min', lat:18.3518320, lng:121.6480930,
+  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'215m', time:'~3 min', lat:18.351735368388443, lng:121.64992893110352,
     steps:['Start at the main entrance','Walk west along the main road','Library is at the road corner'],
     aliases:['library','books','study','lrc','learning'] },
-  avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'170m', time:'~2 min', lat:18.3515274142, lng:121.6504157931,
+  avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'170m', time:'~2 min', lat:18.351488723422452, lng:121.65030611496947,
     steps:['Start at the main entrance','Walk west on the main road','Turn left off the main road','AVR Building is on your right'],
     aliases:['avr','audio','visual','presentation','media'] },
-  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.3525872563, lng:121.6499654677,
+  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.352569667318097, lng:121.64997179523256,
     steps:['Start at the main entrance','Walk west on the main road','Turn right at the road corner','Continue north toward the canteen','Canteen is on your left'],
     aliases:['canteen','food','eat','dining','court','lunch','meal'] },
   cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'330m', time:'~4 min', lat:18.352166160870844, lng:121.6490121022558,
@@ -1220,7 +1220,7 @@ const MARKERS = {
 // GPS reference anchors for translating blueprint waypoints to real GPS.
 // Least-squares affine fit (axis-aligned, north-up) computed from all campus
 // buildings with verified real GPS coordinates vs their traced markers.
-const GPS_TO_NORM = { m11: 99.017944, b1: -12044.861800, m22: -179.141396, b2: 3287.865871 };
+const GPS_TO_NORM = { m11: 133.610117, b1: -16252.991899, m22: -179.367782, b2: 3292.018977 };
 
 // Normalized blueprint (0..1) -> GPS lat/lng (inverse of the affine fit)
 function normToGps(nx0, ny0) {
