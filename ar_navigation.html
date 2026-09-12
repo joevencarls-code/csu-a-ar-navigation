@@ -153,46 +153,7 @@
   .search-empty{text-align:center;padding:60px 20px;color:#475569;font-size:14px}
   .search-empty-icon{font-size:40px;margin-bottom:12px}
 
-  /* ── Map View ── */
-  .map-view{position:absolute;inset:0;z-index:10;display:none;background:#1a1f2e}
-  .map-view.show{display:block}
-  .map-canvas-wrap{width:100%;height:100%;position:relative;overflow:hidden}
-  #map-canvas{width:100%;height:100%;display:block}
-#gm-map{position:absolute;top:0;left:0;width:100%;height:100%;border:0;z-index:1;background:#e8eaed;display:block}
-.gm-lock-note{position:absolute;top:0;left:0;right:0;z-index:3;padding:6px 10px;font-size:11px;color:#1e293b;background:linear-gradient(180deg,rgba(255,255,255,.6),rgba(255,255,255,0));text-align:center;pointer-events:none}
-.gm-overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
-#gm-routes{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
-#gm-markers{position:absolute;top:0;left:0;width:100%;height:100%}
-.gm-marker{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.93);border:2px solid rgba(15,23,42,.35);border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.35);font-size:13px}
-.gm-marker.is-dest{width:26px;height:26px;border-radius:13px;background:#ef4444;border-color:#fff;box-shadow:0 2px 10px rgba(239,68,68,.65)}
-.gm-marker-name{display:none;position:absolute;left:50%;bottom:calc(100% + 4px);transform:translateX(-50%);background:rgba(15,23,42,.88);color:#fff;font-size:11px;padding:3px 8px;border-radius:6px;white-space:nowrap}
-.gm-marker:hover .gm-marker-name{display:block}
-#gm-gps{position:absolute;pointer-events:none}
-.gm-gps-dot{width:15px;height:15px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 0 6px rgba(59,130,246,.22),0 1px 4px rgba(0,0,0,.45);transform:translate(-50%,-50%)}
-.gm-type-btn{width:46px;height:30px;border-radius:9px;font-size:11px;font-weight:700;color:#1e293b}
-  .map-controls{position:absolute;right:14px;bottom:220px;z-index:12;display:flex;flex-direction:column;gap:8px}
-  .map-ctrl-btn{width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.92);color:#1e293b;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.15);cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-  .map-user-btn{position:absolute;right:14px;bottom:280px;z-index:12;width:42px;height:42px;border-radius:50%;border:none;background:rgba(255,255,255,.92);color:var(--blue);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.15);cursor:pointer}
-  .map-topbar{position:absolute;top:0;left:0;right:0;z-index:12;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(15,23,42,.85) 0%,transparent 100%);display:flex;align-items:center;gap:10px}
-  .map-topbar>*{pointer-events:auto}
-  .map-dest-card{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:14px;right:14px;z-index:12;background:rgba(255,255,255,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:16px;padding:14px 16px;box-shadow:0 4px 24px rgba(0,0,0,.12);display:none}
-  .map-dest-card.show{display:block}
-  .map-dest-row{display:flex;align-items:center;gap:12px}
-  .map-dest-icon{width:40px;height:40px;border-radius:12px;background:#dbeafe;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-  .map-dest-info{flex:1;min-width:0}
-  .map-dest-name{font-size:15px;font-weight:800;color:#111827}
-  .map-dest-loc{font-size:12px;color:#6b7280;margin-top:1px}
-  .map-dest-stats{display:flex;gap:8px;margin-top:10px}
-  .map-dest-stat{flex:1;background:#f5f7fa;border-radius:10px;padding:8px;text-align:center}
-  .map-dest-stat-val{font-size:14px;font-weight:800;color:var(--blue)}
-  .map-dest-stat-lbl{font-size:9px;color:#9ca3af;font-weight:600;text-transform:uppercase;margin-top:1px}
-  .map-start-btn{width:100%;margin-top:12px;padding:13px;border:none;border-radius:12px;background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(26,86,219,.3)}
-  .map-back-btn{position:absolute;bottom:24px;left:14px;right:14px;z-index:12;padding:14px;border:none;border-radius:14px;background:rgba(255,255,255,.95);color:var(--blue);font-size:14px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 24px rgba(0,0,0,.15)}
-  .map-back-btn.show{display:flex}
-  .map-legend{position:absolute;bottom:80px;left:14px;z-index:12;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:10px;padding:8px 12px;font-size:11px;color:#475569;display:none}
-  .map-legend.show{display:block}
-  .map-legend-item{display:flex;align-items:center;gap:6px;margin:3px 0}
-  .map-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
 </style>
 
 </head>
@@ -247,9 +208,6 @@
     <button class="topbar-btn" onclick="openSearch()" aria-label="Search" title="Search destination">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </button>
-    <button class="topbar-btn" onclick="showMapFromAR()" aria-label="Map" title="Show map">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
-    </button>
     <span class="topbar-badge" id="topbar-badge">QR SCAN</span>
     <button class="topbar-btn" onclick="openScan()" aria-label="Scan QR">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
@@ -295,10 +253,6 @@
     </div>
     <div class="steps" id="steps-container"></div>
     <div class="btn-row">
-      <button class="btn btn-outline" onclick="showMapFromAR()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
-        Map
-      </button>
       <button class="btn btn-primary" onclick="openScan()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
         Scan QR
@@ -331,67 +285,6 @@
     <div class="search-results" id="search-results"></div>
   </div>
 
-  <!-- Map View -->
-  <div class="map-view" id="map-view">
-    <div class="map-canvas-wrap">
-      <div class="gm-lock-note">Google Maps · CSU Aparri Campus</div>
-      <iframe id="gm-map" title="CSU Aparri campus map (Google Maps)" allowfullscreen referrerpolicy="no-referrer-when-downgrade" loading="eager"></iframe>
-      <div class="gm-overlay" id="gm-overlay">
-        <svg id="gm-routes"></svg>
-        <div id="gm-markers"></div>
-        <div id="gm-gps"></div>
-      </div>
-    </div>
-    <div class="map-topbar">
-      <button class="topbar-btn" onclick="closeMapView()" aria-label="Back">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <span class="topbar-title" style="color:#fff">Campus Map</span>
-      <button class="topbar-btn" onclick="recenterMap()" aria-label="Center" style="background:rgba(255,255,255,.15)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
-      </button>
-    </div>
-    <div class="map-dest-card" id="map-dest-card">
-      <div class="map-dest-row">
-        <div class="map-dest-icon" id="map-dest-icon"></div>
-        <div class="map-dest-info">
-          <div class="map-dest-name" id="map-dest-name"></div>
-          <div class="map-dest-loc" id="map-dest-loc"></div>
-        </div>
-      </div>
-      <div class="map-dest-stats">
-        <div class="map-dest-stat"><div class="map-dest-stat-val" id="map-dist-val">--</div><div class="map-dest-stat-lbl">Distance</div></div>
-        <div class="map-dest-stat"><div class="map-dest-stat-val" id="map-time-val">--</div><div class="map-dest-stat-lbl">Walk Time</div></div>
-        <div class="map-dest-stat"><div class="map-dest-stat-val" id="map-gps-val">--</div><div class="map-dest-stat-lbl">GPS</div></div>
-      </div>
-      <button class="map-start-btn" id="map-start-btn" onclick="startARNavigation()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-        Start AR Navigation
-      </button>
-    </div>
-    <div class="map-legend" id="map-legend">
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#3b82f6"></div> Your Location</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#ef4444"></div> Destination</div>
-      <div class="map-legend-item"><div class="map-legend-dot" style="background:#22c55e;width:10px;height:3px;border-radius:2px"></div> Route</div>
-    </div>
-    <div class="map-user-btn" onclick="recenterMap()" aria-label="My Location">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
-    </div>
-    <div class="map-controls">
-      <button class="map-ctrl-btn" onclick="zoomMap(0.3)" aria-label="Zoom in">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
-      <button class="map-ctrl-btn" onclick="zoomMap(-0.3)" aria-label="Zoom out">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
-      <button class="map-ctrl-btn gm-type-btn" onclick="setGmType('m')">Map</button>
-      <button class="map-ctrl-btn gm-type-btn" onclick="setGmType('h')">Sat</button>
-    </div>
-    <button class="map-back-btn show" id="map-search-btn" onclick="openSearch()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      Search Destination
-    </button>
-  </div>
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
@@ -507,8 +400,8 @@ window.addEventListener('load', async () => {
     const gate = document.getElementById('start-gate');
     gate.style.display = 'flex';
   } else {
-    // Google Maps-like entry: show search + map without requiring camera yet
-    // Start a lightweight GPS fix so the map can show the user's location
+    // Entry without a direct link: show the destination search first.
+    // Start a lightweight GPS fix so results can sort by real distance.
     startGPS();
     hideLoading();
     openSearch();
@@ -686,13 +579,6 @@ function updateDistanceAndBearing() {
   const eta = Math.max(1, Math.round(distToDest / userSpeed / 60));
   document.getElementById('s-time').textContent = '~' + eta + ' min';
   document.getElementById('s-gps').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
-
-  // Update map destination card if visible
-  if (mapDest) {
-    document.getElementById('map-dist-val').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
-    document.getElementById('map-time-val').textContent = '~' + eta + ' min';
-    document.getElementById('map-gps-val').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
-  }
 
   // Arrow rotation: difference between compass heading and bearing to destination
   updateArrowRotation();
@@ -1274,9 +1160,11 @@ function renderSearchResults(query) {
   container.innerHTML = html;
 }
 
-function selectSearchResult(key) {
+async function selectSearchResult(key) {
   closeSearch();
-  showMapView(key);
+  if (!streamReady() && !await initCamera()) return;
+  setDestination(key);
+  showToast('Navigating to ' + BUILDINGS[key].name);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1284,29 +1172,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderSearchResults(e.target.value);
   });
 });
-
 /* ================================================================
-   MAP VIEW — Google Maps embed (whole CSU-A campus, no API key)
+   ROUTE DATA — CSU-A Campus
    ================================================================ */
-
-let mapReady = false;
-let mapDest = null;
-let mapAnimFrame = null;
-let gmPaintedDest = null;
-let gmAutoFit = true;   // auto-zoom so the whole campus fits until the user zooms
-
-// Google Maps embed state — centred on the whole campus so only CSU-A stays
-// in view. The free embed (output=embed) needs no API key.
-let gmCenter = { lat: 18.3519556, lng: 121.6485908 };
-let GM_ZOOM = 18;
-let gmMapType = 'm';   // m = roadmap, h = satellite/hybrid
-
-// Campus bounding box (padded so every building + margin stays visible).
-// Everything outside this box is dimmed by an overlay so only the campus shows.
-const GM_BOUNDS = {
-  sw: { lat: 18.35031, lng: 121.64650 },
-  ne: { lat: 18.35360, lng: 121.65066 }
-};
 
 // Mini map (AR overlay) state
 let minimapCanvas = null;
@@ -1315,9 +1183,9 @@ let minimapAnimFrame = null;
 let minimapReady = false;
 
 // Hand-traced routes (normalized 0..1 relative to csu_map.png), ported
-// verbatim from lib/data/campus_routes_data.dart so the web map shows the
-// SAME certified pathway lines as the main kiosk. Each array is a polyline
-// from the kiosk start to the building's end point.
+// verbatim from lib/data/campus_routes_data.dart so the route guide shows
+// the SAME certified pathway lines as the main kiosk. Each array is a
+// polyline from the kiosk start to the building's end point.
 const ROUTES = {
   'admin':       [[0.935,0.379],[0.9,0.374],[0.85,0.363],[0.8,0.35],[0.75,0.34],[0.7,0.328],[0.67,0.319],[0.64,0.304],[0.634,0.33],[0.63,0.363],[0.65,0.372],[0.662,0.377],[0.66,0.4],[0.671,0.414]],
   'cte':         [[0.931,0.382],[0.878,0.367],[0.823,0.353],[0.768,0.338],[0.713,0.324],[0.658,0.309],[0.604,0.294],[0.549,0.28],[0.494,0.265],[0.439,0.248],[0.391,0.237],[0.375,0.231]],
@@ -1349,282 +1217,14 @@ const MARKERS = {
   'ceo_cottage':[0.4937,0.5105], 'villa1':[0.5058,0.4543], 'dorm':[0.6286,0.5179]
 };
 
-// Building footprints ("obstacles") drawn as solid blocks on the map so the
-// navigation paths appear to route around real structures, like a floor plan.
-function buildObstacles() {
-  const defs = {
-    admin:[0.10,0.11], cte:[0.13,0.14], gymplex:[0.15,0.16], gatchalian:[0.13,0.14],
-    cics:[0.13,0.14], library:[0.11,0.12], avr:[0.09,0.10], canteen:[0.14,0.12],
-    cit:[0.11,0.12], cbea:[0.11,0.12], infra:[0.12,0.13], dnst:[0.13,0.16],
-    oldadmin:[0.10,0.12], hatchery:[0.12,0.13], icrm:[0.11,0.12],
-    ceo_cottage:[0.08,0.09], villa1:[0.06,0.07], dorm:[0.10,0.12]
-  };
-  const obs = [];
-  Object.entries(MARKERS).forEach(([key, m]) => {
-    const d = defs[key] || [0.10,0.10];
-    const w = d[0], h = d[1];
-    obs.push({ x: m[0] - w/2, y: m[1] - h/2, w: w, h: h, name: BUILDINGS[key] ? BUILDINGS[key].name : key, icon: BUILDINGS[key] ? BUILDINGS[key].icon : '' });
-  });
-  return obs;
-}
-const OBSTACLES = buildObstacles();
-
-// GPS reference anchors to calibrate the blue "you are here" dot onto the map.
+// GPS reference anchors for translating blueprint waypoints to real GPS.
 // Least-squares affine fit (axis-aligned, north-up) computed from all campus
-// buildings with verified real GPS coordinates vs their traced markers, so the
-// GPS dot lands as close as possible to the correct spot on the blueprint.
+// buildings with verified real GPS coordinates vs their traced markers.
 const GPS_TO_NORM = { m11: 133.340544, b1: -16220.196369, m22: -175.957048, b2: 3229.424686 };
 
-// GPS -> normalized map coords (affine calibration to traced anchors)
-function gpsToNorm(lat, lng) {
-  const x = GPS_TO_NORM.m11 * lng + GPS_TO_NORM.b1;
-  const y = GPS_TO_NORM.m22 * lat + GPS_TO_NORM.b2;
-  return { x, y };
-}
-
-function showMapFromAR() {
-  stopMinimap();
-  if (dest) {
-    // Switch to map view for current destination
-    showMapView(dest);
-  } else {
-    // No destination yet, show map centered on user
-    mapDest = null;
-    document.getElementById('map-view').classList.add('show');
-    document.getElementById('map-dest-card').classList.remove('show');
-    document.getElementById('map-legend').classList.add('show');
-    document.getElementById('map-search-btn').classList.add('show');
-    document.getElementById('topbar').style.display = 'none';
-    initMapCanvas();
-    startMapRender();
-    recenterMap();
-  }
-}
-
-function showMapView(key) {
-  stopMinimap();
-  mapDest = key;  const b = BUILDINGS[key];
-
-  document.getElementById('map-view').classList.add('show');
-  document.getElementById('map-dest-card').classList.add('show');
-  document.getElementById('map-legend').classList.add('show');
-  document.getElementById('map-search-btn').classList.add('show');
-
-  document.getElementById('map-dest-icon').textContent = b.icon;
-  document.getElementById('map-dest-name').textContent = b.name;
-  document.getElementById('map-dest-loc').textContent = b.loc;
-
-  if (gpsPos) {
-    const d = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-    document.getElementById('map-dist-val').textContent = d < 1000 ? Math.round(d) + 'm' : (d/1000).toFixed(1) + 'km';
-    const eta = Math.max(1, Math.round(d / userSpeed / 60));
-    document.getElementById('map-time-val').textContent = '~' + eta + ' min';
-    document.getElementById('map-gps-val').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
-  } else {
-    document.getElementById('map-dist-val').textContent = b.dist;
-    document.getElementById('map-time-val').textContent = b.time;
-    document.getElementById('map-gps-val').textContent = 'Waiting...';
-  }
-
-  // Hide AR topbar, show map
-  document.getElementById('topbar').style.display = 'none';
-
-  initMapCanvas();
-  startMapRender();
-
-  // Center map on destination
-  centerMapOnDest();
-}
-
-function closeMapView() {
-  document.getElementById('map-view').classList.remove('show');
-  document.getElementById('map-dest-card').classList.remove('show');
-  document.getElementById('map-legend').classList.remove('show');
-  document.getElementById('map-search-btn').classList.remove('show');
-  stopMapRender();
-  startMinimap();
-  const hadDest = mapDest;
-  mapDest = null;
-
-  if (hadDest && dest) {
-    // Returning to active AR navigation
-    document.getElementById('topbar').style.display = 'flex';
-  } else if (dest) {
-    document.getElementById('topbar').style.display = 'flex';
-  } else {
-    openSearch();
-  }
-}
-
-// Web-mercator projection of a lat/lng into viewport px for the current embed
-// centre/zoom, so the overlay lines up exactly with the Google tiles.
-function gmProject(lat, lng) {
-  const world = 256 * Math.pow(2, GM_ZOOM);
-  const px = lngv => ((lngv + 180) / 360) * world;
-  const py = latv => {
-    const s = Math.sin((latv * Math.PI) / 180);
-    return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * world;
-  };
-  return {
-    x: window.innerWidth / 2 + (px(lng) - px(gmCenter.lng)),
-    y: window.innerHeight / 2 + (py(lat) - py(gmCenter.lat))
-  };
-}
-
-// Inverse calibration: normalized blueprint (0..1) -> GPS lat/lng
+// Normalized blueprint (0..1) -> GPS lat/lng (inverse of the affine fit)
 function normToGps(nx0, ny0) {
   return { lat: (ny0 - GPS_TO_NORM.b2) / GPS_TO_NORM.m22, lng: (nx0 - GPS_TO_NORM.b1) / GPS_TO_NORM.m11 };
-}
-
-// pick the largest integer zoom where the whole campus fits the screen
-function pickDefaultZoom() {
-  for (let z = 20; z >= 15; z--) {
-    const old = GM_ZOOM;
-    GM_ZOOM = z;
-    const sw = gmProject(GM_BOUNDS.sw.lat, GM_BOUNDS.sw.lng);
-    const ne = gmProject(GM_BOUNDS.ne.lat, GM_BOUNDS.ne.lng);
-    GM_ZOOM = old;
-    if (Math.abs(ne.x - sw.x) <= window.innerWidth * 0.97 && Math.abs(ne.y - sw.y) <= window.innerHeight * 0.94) return z;
-  }
-  return 15;
-}
-
-// (Re)load the free Google Maps embed and repaint the overlay
-function loadGmMap() {
-  if (gmAutoFit) GM_ZOOM = pickDefaultZoom();
-  const ifr = document.getElementById('gm-map');
-  if (ifr) {
-    ifr.src = 'https://www.google.com/maps?q=' + gmCenter.lat.toFixed(6) + ',' + gmCenter.lng.toFixed(6) +
-              '&z=' + GM_ZOOM + '&t=' + gmMapType + '&hl=en&output=embed';
-  }
-  gmPaintedDest = null;
-  buildGmMarkers();
-  startMapRender();
-}
-
-function buildGmMarkers() {
-  const box = document.getElementById('gm-markers');
-  if (!box) return;
-  box.innerHTML = '';
-  Object.entries(BUILDINGS).forEach(([key, b]) => {
-    const isDest = key === mapDest;
-    const p = gmProject(b.lat, b.lng);
-    const el = document.createElement('div');
-    el.className = 'gm-marker' + (isDest ? ' is-dest' : '');
-    el.style.left = p.x + 'px';
-    el.style.top = p.y + 'px';
-    el.innerHTML = b.icon + '<span class="gm-marker-name">' + b.name + '</span>';
-    if (!isDest) el.onclick = () => showMapView(key);
-    box.appendChild(el);
-  });
-}
-
-// Repaint dim/route/accuracy SVG layer (cheap enough to refresh every frame)
-function renderGmDynamic() {
-  const svg = document.getElementById('gm-routes');
-  if (!svg) return;
-  const W = window.innerWidth, H = window.innerHeight;
-
-  if (gmPaintedDest !== mapDest) { gmPaintedDest = mapDest; buildGmMarkers(); }
-
-  let s = '';
-
-  // Dim everything outside the campus so only CSU-A remains visible
-  const swP = gmProject(GM_BOUNDS.sw.lat, GM_BOUNDS.sw.lng);
-  const neP = gmProject(GM_BOUNDS.ne.lat, GM_BOUNDS.ne.lng);
-  const bx = Math.min(swP.x, neP.x), by = Math.min(swP.y, neP.y);
-  const bw = Math.abs(neP.x - swP.x), bh = Math.abs(neP.y - swP.y);
-  s += '<path d="M0,0H' + W + 'V' + H + 'H0Z M' + bx + ',' + by + 'H' + (bx + bw) + 'V' + (by + bh) + 'H' + bx + 'Z' +
-       '" fill="rgba(6,12,26,0.52)" fill-rule="evenodd" pointer-events="none"></path>';
-  s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh +
-       '" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none"></rect>';
-
-  // Certified route polyline (blueprint route -> GPS -> screen px), green
-  if (mapDest && ROUTES[mapDest]) {
-    const pts = ROUTES[mapDest].map(p0 => { const g = normToGps(p0[0], p0[1]); return gmProject(g.lat, g.lng); });
-    const d = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
-    s += '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>';
-    s += '<path d="' + d + '" fill="none" stroke="#22c55e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>';
-  }
-
-  // GPS accuracy ring
-  if (gpsPos && gpsPos.acc) {
-    const u = gmProject(gpsPos.lat, gpsPos.lng);
-    const res = 156543.03392 * Math.cos((gpsPos.lat * Math.PI) / 180) / Math.pow(2, GM_ZOOM);
-    const r = Math.max(12, gpsPos.acc / res);
-    s += '<circle cx="' + u.x.toFixed(1) + '" cy="' + u.y.toFixed(1) + '" r="' + r.toFixed(1) +
-         '" fill="rgba(59,130,246,0.10)" stroke="rgba(59,130,246,0.28)" stroke-width="1" pointer-events="none"></circle>';
-  }
-
-  svg.innerHTML = s;
-}
-
-function initMapCanvas() {
-  if (mapReady) { handleMapResize(); return; }
-  window.addEventListener('resize', handleMapResize);
-  loadGmMap();
-  mapReady = true;
-}
-
-function handleMapResize() {
-  renderGmDynamic();
-  updateGmUser();
-}
-
-function updateGmUser() {
-  renderGmDynamic();
-  const gpsEl = document.getElementById('gm-gps');
-  if (!gpsEl) return;
-  if (gpsPos) {
-    const g = gmProject(gpsPos.lat, gpsPos.lng);
-    gpsEl.style.left = g.x + 'px';
-    gpsEl.style.top = g.y + 'px';
-    gpsEl.innerHTML = '<div class="gm-gps-dot"></div>';
-  } else {
-    gpsEl.innerHTML = '';
-  }
-}
-
-function centerMapOnDest() {
-  // Keep the whole campus in view; the red dest pin + green route highlight it
-  gmCenter = {
-    lat: (GM_BOUNDS.sw.lat + GM_BOUNDS.ne.lat) / 2,
-    lng: (GM_BOUNDS.sw.lng + GM_BOUNDS.ne.lng) / 2
-  };
-  loadGmMap();
-}
-
-function recenterMap() {
-  if (gpsPos) {
-    gmCenter = { lat: gpsPos.lat, lng: gpsPos.lng };
-  } else {
-    gmCenter = {
-      lat: (GM_BOUNDS.sw.lat + GM_BOUNDS.ne.lat) / 2,
-      lng: (GM_BOUNDS.sw.lng + GM_BOUNDS.ne.lng) / 2
-    };
-  }
-  loadGmMap();
-}
-
-function zoomMap(delta) {
-  gmAutoFit = false;
-  GM_ZOOM = Math.max(15, Math.min(20, GM_ZOOM + (delta > 0 ? 1 : -1)));
-  loadGmMap();
-}
-
-function setGmType(t) {
-  gmMapType = t;
-  loadGmMap();
-}
-
-function startMapRender() {
-  if (mapAnimFrame) cancelAnimationFrame(mapAnimFrame);
-  const tick = () => { updateGmUser(); mapAnimFrame = requestAnimationFrame(tick); };
-  mapAnimFrame = requestAnimationFrame(tick);
-}
-
-function stopMapRender() {
-  if (mapAnimFrame) { cancelAnimationFrame(mapAnimFrame); mapAnimFrame = null; }
 }
 
 /* ================================================================
@@ -1662,11 +1262,11 @@ function stopMinimap() {
   if (minimapCanvas) minimapCanvas.style.display = 'none';
 }
 
-// Route guide: shows "You" at the bottom with a path toward the destination.
-// It is heading-up (whatever direction you face points up on the square), so
-// the guide always shows the way to turn, plus the live distance remaining.
+// Route guide: draws "You" and the real certified campus route to the chosen
+// destination, scaled from real coordinates. It is heading-up, so whatever
+// direction you face points up on the square and shows exactly which way to go.
 function renderMinimap(ts) {
-  if (!minimapCtx || !minimapCanvas || !gpsPos) {
+  if (!minimapCtx || !minimapCanvas) {
     if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
     return;
   }
@@ -1689,7 +1289,19 @@ function renderMinimap(ts) {
     ctx.textAlign = 'center';
     ctx.fillText('Route guide', size / 2, size / 2 - 6);
     ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('pick a destination', size / 2, size / 2 + 8);
+    ctx.fillText('search a destination', size / 2, size / 2 + 8);
+    ctx.restore();
+    minimapAnimFrame = requestAnimationFrame(renderMinimap);
+    return;
+  }
+
+  if (!gpsPos) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 10px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Route guide', size / 2, size / 2 - 6);
+    ctx.font = '9px -apple-system, sans-serif';
+    ctx.fillText('waiting for GPS...', size / 2, size / 2 + 8);
     ctx.restore();
     minimapAnimFrame = requestAnimationFrame(renderMinimap);
     return;
@@ -1697,51 +1309,86 @@ function renderMinimap(ts) {
 
   const b = BUILDINGS[dest];
 
-  // Relative displacement (east, north) in metres
-  const dx = (b.lng - gpsPos.lng) * Math.cos(gpsPos.lat * Math.PI / 180) * 111320;
-  const dy = (b.lat - gpsPos.lat) * 110540;
-  const distM = Math.sqrt(dx * dx + dy * dy) || 1;
+  // Flat-earth metres (east, north) relative to the user's GPS position
+  const meters = (lat, lng) => ({
+    e: (lng - gpsPos.lng) * Math.cos(gpsPos.lat * Math.PI / 180) * 111320,
+    n: (lat - gpsPos.lat) * 110540
+  });
 
-  // Scale the full distance into the little square
-  const scale = Math.min(48 / distM, 2.2);
+  // Real certified campus route -> GPS -> local metres
+  let routePts = [];
+  if (ROUTES[dest]) {
+    routePts = ROUTES[dest].map(p => {
+      const g = normToGps(p[0], p[1]);
+      return meters(g.lat, g.lng);
+    });
+  }
+  let destPt = null;
+  if (MARKERS[dest]) {
+    const g = normToGps(MARKERS[dest][0], MARKERS[dest][1]);
+    destPt = meters(g.lat, g.lng);
+  }
+
+  // Fit the whole path + destination inside the square, at real scale
+  let farthest = 1;
+  const consider = pt => { const d = Math.hypot(pt.e, pt.n); if (d > farthest) farthest = d; };
+  routePts.forEach(consider);
+  if (destPt) consider(destPt);
+  const scale = Math.min(44 / farthest, 2.5);
 
   const userX = size / 2;
   const userY = size - 18;
 
-  // Rotate so the direction you face (heading) points up on screen.
-  // forward = east*sin(h) + north*cos(h)  (screen-up), right = east*cos(h) - north*sin(h)
+  // Heading-up: the direction you face always points up on the square
   const hRad = (heading * Math.PI) / 180;
-  const fwd = dx * Math.sin(hRad) + dy * Math.cos(hRad);
-  const right = dx * Math.cos(hRad) - dy * Math.sin(hRad);
-  const destX = userX + right * scale;
-  const destY = userY - fwd * scale;
+  const place = pt => {
+    const fwd = pt.e * Math.sin(hRad) + pt.n * Math.cos(hRad);
+    const right = pt.e * Math.cos(hRad) - pt.n * Math.sin(hRad);
+    return { x: userX + right * scale, y: userY - fwd * scale };
+  };
 
-  // Keep the pin inside the square even if the destination is behind you
-  const pinX = Math.min(108, Math.max(12, destX));
-  const pinY = Math.min(108, Math.max(12, destY));
+  // Draw the accurate route path
+  const hasRoute = routePts.length > 0;
+  let routeScr = [];
+  if (hasRoute) {
+    routeScr = routePts.map(place);
 
-  // Gentle curve so it reads as a path
-  const midX = (userX + destX) / 2;
-  const midY = (userY + destY) / 2;
-  const cpx = midX - (pinY - userY) * 0.22;
-  const cpy = midY + (pinX - userX) * 0.22;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    routeScr.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.stroke();
 
-  ctx.strokeStyle = '#22c55e';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(userX, userY);
-  ctx.quadraticCurveTo(cpx, cpy, pinX, pinY);
-  ctx.stroke();
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    routeScr.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+    ctx.stroke();
 
-  const ang = Math.atan2(pinY - cpy, pinX - cpx);
-  ctx.fillStyle = '#22c55e';
-  ctx.beginPath();
-  ctx.moveTo(pinX, pinY);
-  ctx.lineTo(pinX - 8 * Math.cos(ang - 0.45), pinY - 8 * Math.sin(ang - 0.45));
-  ctx.lineTo(pinX - 8 * Math.cos(ang + 0.45), pinY - 8 * Math.sin(ang + 0.45));
-  ctx.closePath();
-  ctx.fill();
+    // Dashed connector from the user to the nearest point on the route
+    let best = 0, bestD = 1e9;
+    routeScr.forEach((p, i) => {
+      const d = Math.hypot(p.x - userX, p.y - userY);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = 'rgba(34,197,94,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(userX, userY);
+    ctx.lineTo(routeScr[best].x, routeScr[best].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  let destScr = destPt ? place(destPt) : null;
+  if (!destScr) destScr = hasRoute ? routeScr[routeScr.length - 1] : { x: userX + 26, y: userY - 26 };
+
+  // Keep the pin visible inside the square even if the destination is behind you
+  const pinX = Math.min(108, Math.max(12, destScr.x));
+  const pinY = Math.min(108, Math.max(12, destScr.y));
 
   // Destination pin
   ctx.beginPath();
@@ -1776,10 +1423,12 @@ function renderMinimap(ts) {
   ctx.font = 'bold 8px -apple-system, sans-serif';
   ctx.fillText('You', userX, userY + 17);
 
-  // Distance badge in the middle of the path
+  // Distance badge
   const distText = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest / 1000).toFixed(1) + 'km';
   ctx.font = 'bold 10px -apple-system, sans-serif';
   const tw = ctx.measureText(distText).width;
+  const midX = (userX + pinX) / 2;
+  const midY = (userY + pinY) / 2;
   ctx.beginPath();
   ctx.roundRect(midX - tw / 2 - 6, midY - 9, tw + 12, 18, 9);
   ctx.fillStyle = 'rgba(9,15,28,0.85)';
@@ -1795,58 +1444,9 @@ function renderMinimap(ts) {
   minimapAnimFrame = requestAnimationFrame(renderMinimap);
 }
 
-function startARNavigation() {
-  if (!mapDest) return;
-
-  const wasNavigating = dest !== null;
-  const targetKey = mapDest;
-
-  // Close map views first
-  document.getElementById('map-view').classList.remove('show');
-  document.getElementById('map-dest-card').classList.remove('show');
-  document.getElementById('map-legend').classList.remove('show');
-  document.getElementById('map-search-btn').classList.remove('show');
-  stopMapRender();
-
-  // Ensure camera is running for AR view (may need user permission)
-  if (!stream || streamReady() === false) {
-    initCameraAndNavigate(targetKey);
-    return;
-  }
-
-  enterARNavigation(targetKey, wasNavigating);
-}
-
 function streamReady() {
   return stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
 }
-
-async function initCameraAndNavigate(key) {
-  const wasNavigating = dest !== null;
-  document.getElementById('loading').classList.remove('hidden');
-  const ok = await initCamera();
-  document.getElementById('loading').classList.add('hidden');
-  enterARNavigation(key, wasNavigating);
-}
-
-function enterARNavigation(key, wasNavigating) {
-  mapDest = null;
-  document.getElementById('topbar').style.display = 'flex';
-  startMinimap();
-
-  if (wasNavigating) {
-    // Already navigating, switch destination
-    dest = key;
-    stepIdx = 0;
-    arrived = false;
-    arrowRotation = 0;
-    currentArrowRot = 0;
-    setDestinationUI(key);
-  } else {
-    setDestination(key);
-  }
-}
-
 /* ================================================================
    UTILS
    ================================================================ */
