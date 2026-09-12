@@ -125,6 +125,16 @@
   .arrival h2{color:#fff;font-size:22px;font-weight:800;margin-bottom:4px}
   .arrival p{color:#94a3b8;font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
   .arrival button{background:#fff;color:#0f172a;border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+  .fb-area{margin-top:8px;text-align:center}
+  .fb-stars{display:flex;gap:6px;justify-content:center;margin-bottom:8px}
+  .fb-star{font-size:28px;color:rgba(255,255,255,.35);cursor:pointer;transition:color .15s,transform .15s}
+  .fb-star:hover,.fb-star.on{color:#facc15;transform:scale(1.15)}
+  .fb-msg{width:86%;max-width:280px;padding:10px 12px;border:1.5px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.08);color:#fff;font-size:13px;resize:none;margin-bottom:10px;font-family:inherit}
+  .fb-msg::placeholder{color:rgba(255,255,255,.45)}
+  .fb-submit{background:var(--blue);color:#fff;padding:9px 20px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;margin-right:8px}
+  .fb-submit:disabled{opacity:.5;cursor:default}
+  .fb-skip{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer;vertical-align:middle;text-decoration:underline}
+  .fb-thanks{color:#22c55e;font-size:14px;font-weight:700;margin-top:8px}
 
   /* ── Toast ── */
   .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,0,0,.85);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
@@ -267,6 +277,20 @@
     </div>
     <h2>You've Arrived!</h2>
     <p id="arrival-msg"></p>
+    <div class="fb-area" id="fb-area">
+      <div class="fb-stars" id="fb-stars">
+        <span class="fb-star" data-star="1">&#9733;</span>
+        <span class="fb-star" data-star="2">&#9733;</span>
+        <span class="fb-star" data-star="3">&#9733;</span>
+        <span class="fb-star" data-star="4">&#9733;</span>
+        <span class="fb-star" data-star="5">&#9733;</span>
+      </div>
+      <textarea class="fb-msg" id="fb-msg" rows="2" placeholder="Was this helpful? Optional message..."></textarea>
+      <br>
+      <button class="fb-submit" id="fb-submit" onclick="submitFeedback()">Send Feedback</button>
+      <button class="fb-skip" onclick="skipFeedback()">Skip</button>
+      <div class="fb-thanks" id="fb-thanks" style="display:none">Thanks for your feedback!</div>
+    </div>
     <button onclick="finishNavigation()">Done</button>
   </div>
 
@@ -626,6 +650,7 @@ function autoAdvanceByDistance() {
 
 function triggerArrival() {
   arrived = true;
+  resetFeedbackUI();
   const b = BUILDINGS[dest];
   document.getElementById('arrival-msg').textContent = 'You have reached ' + b.name;
   document.getElementById('arrival').classList.add('show');
@@ -1171,6 +1196,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', e => {
     renderSearchResults(e.target.value);
   });
+  initFeedbackUI();
+  flushPendingFeedback();
 });
 /* ================================================================
    ROUTE DATA — CSU-A Campus
@@ -1478,6 +1505,121 @@ function showToast(msg) {
   t.classList.add('show');
   clearTimeout(showToast._timer);
   showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ================================================================
+   FEEDBACK — AR arrival rating sent to Supabase "feedbacks" table
+   Seen by the IMS Super Admin. Falls back to localStorage if
+   offline, then retries on next page load.
+   ================================================================ */
+const FEEDBACK_URL = 'https://kookpivlvxohyvzxhkex.supabase.co/rest/v1/feedbacks';
+const FEEDBACK_KEY = 'sb_publishable_9SUEcz-VR_p5QYuKto9-qA_iDL4EI3q';
+let selectedRating = 0;
+
+function initFeedbackUI() {
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.onclick = () => {
+      selectedRating = parseInt(s.dataset.star);
+      updateStars();
+    };
+  });
+}
+
+function updateStars() {
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.classList.toggle('on', parseInt(s.dataset.star) <= selectedRating);
+  });
+}
+
+function resetFeedbackUI() {
+  selectedRating = 0;
+  updateStars();
+  const msg = document.getElementById('fb-msg');
+  if (msg) msg.value = '';
+  const area = document.getElementById('fb-area');
+  if (area) area.style.display = '';
+  const thanks = document.getElementById('fb-thanks');
+  if (thanks) thanks.style.display = 'none';
+  const submitBtn = document.getElementById('fb-submit');
+  if (submitBtn) submitBtn.disabled = false;
+}
+
+function skipFeedback() {
+  showFeedbackThanks();
+}
+
+function showFeedbackThanks() {
+  const area = document.getElementById('fb-area');
+  const thanks = document.getElementById('fb-thanks');
+  if (area) area.style.display = 'none';
+  if (thanks) thanks.style.display = '';
+}
+
+async function submitFeedback() {
+  if (!selectedRating) {
+    showToast('Tap a star rating first');
+    return;
+  }
+  const submitBtn = document.getElementById('fb-submit');
+  if (submitBtn) submitBtn.disabled = true;
+
+  const body = {
+    building_key: dest,
+    building_name: (BUILDINGS[dest] && BUILDINGS[dest].name) || dest,
+    rating: selectedRating,
+    message: (document.getElementById('fb-msg').value || '').trim() || null,
+    gps_lat: gpsPos ? gpsPos.lat : null,
+    gps_lng: gpsPos ? gpsPos.lng : null,
+    gps_acc: gpsPos ? gpsPos.acc : null,
+    device: navigator.userAgent
+  };
+
+  try {
+    const resp = await fetch(FEEDBACK_URL, {
+      method: 'POST',
+      headers: {
+        'apikey': FEEDBACK_KEY,
+        'Authorization': 'Bearer ' + FEEDBACK_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  } catch (e) {
+    console.warn('Feedback POST failed, saving locally for retry:', e);
+    try {
+      const pending = JSON.parse(localStorage.getItem('pendingFeedbacks') || '[]');
+      pending.push(body);
+      localStorage.setItem('pendingFeedbacks', JSON.stringify(pending));
+    } catch (_) {}
+  }
+  showFeedbackThanks();
+}
+
+async function flushPendingFeedback() {
+  let pending;
+  try {
+    pending = JSON.parse(localStorage.getItem('pendingFeedbacks') || '[]');
+  } catch (_) { return; }
+  if (!pending.length) return;
+  const left = [];
+  for (const body of pending) {
+    try {
+      const r = await fetch(FEEDBACK_URL, {
+        method: 'POST',
+        headers: {
+          'apikey': FEEDBACK_KEY,
+          'Authorization': 'Bearer ' + FEEDBACK_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) left.push(body);
+    } catch (_) { left.push(body); }
+  }
+  try { localStorage.setItem('pendingFeedbacks', JSON.stringify(left)); } catch (_) {}
 }
 
 /* ================================================================
