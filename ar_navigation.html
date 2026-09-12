@@ -387,7 +387,7 @@ const BUILDINGS = {
   admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'180m', time:'~2 min', lat:18.3511767916, lng:121.6499340859,
     steps:['Start at the main entrance gate','Head straight along the main road westward','Pass the flagpole on your left','Administration Building is on your right'],
     aliases:['admin','registrar','hrdo','guidance','finance','admission'] },
-  cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'430m', time:'~5 min', lat:18.352283901747608, lng:121.64767139534678,
+  cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'430m', time:'~5 min', lat:18.352268721573235, lng:121.64765987770043,
     steps:['Start at the main entrance','Walk west along the main road','Continue past the junction','CTE Building is on your right'],
     aliases:['cte','teacher','education','teaching'] },
   gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.3524288316, lng:121.6502443395,
@@ -452,7 +452,8 @@ let dest = null;          // current building key
 let stepIdx = 0;          // current step index
 let startDist = 0;        // GPS distance from first fix to destination (for step auto-advance)
 let gpsPos = null;        // {lat, lng}
-let heading = 0;          // compass heading degrees
+let heading = 0;          // smoothed compass heading degrees
+let rawHeading = -1;      // last raw compass reading (for smoothing)
 let bearing = 0;          // bearing to destination degrees
 let distToDest = 0;       // metres
 let userSpeed = 1.4;      // walking speed m/s estimate
@@ -650,6 +651,12 @@ function stopGPS() {
   }
 }
 
+function updateArrowRotation() {
+  if (!gpsPos || !dest) return;
+  const diff = normalizeAngle(bearing - heading);
+  arrowRotation = (diff * Math.PI) / 180;
+}
+
 function updateDistanceAndBearing() {
   if (!gpsPos || !dest) return;
   const b = BUILDINGS[dest];
@@ -670,8 +677,7 @@ function updateDistanceAndBearing() {
   }
 
   // Arrow rotation: difference between compass heading and bearing to destination
-  const diff = normalizeAngle(bearing - heading);
-  arrowRotation = (diff * Math.PI) / 180;
+  updateArrowRotation();
 
   // Auto-advance steps based on distance thresholds
   autoAdvanceByDistance();
@@ -726,6 +732,25 @@ function triggerArrival() {
 /* ================================================================
    COMPASS / ORIENTATION
    ================================================================ */
+// Tilt-compensated compass heading from the W3C DeviceOrientation spec:
+// heading of the horizontal component of the vector pointing out the back of the screen.
+// Correct in any orientation (portrait/landscape/flat), unlike (360 - alpha),
+// which only works when the device is held flat.
+function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
+  const d2r = Math.PI / 180;
+  const x = betaDeg * d2r;
+  const y = gammaDeg * d2r;
+  const z = alphaDeg * d2r;
+  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
+  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
+  let Vx = -cZ * sY - sZ * sX * cY;
+  let Vy = -sZ * sY + cZ * sX * cY;
+  let h = Math.atan(Vx / Vy);
+  if (Vy < 0) h += Math.PI;
+  else if (Vx < 0) h += 2 * Math.PI;
+  return (h * (180 / Math.PI) + 360) % 360;
+}
+
 function startCompass() {
   let hasPermission = false;
 
@@ -743,13 +768,27 @@ function installOrientationListener() {
   orientationListener = e => {
     let h = 0;
     if (e.webkitCompassHeading !== undefined) {
-      h = e.webkitCompassHeading; // iOS
-    } else if (e.alpha !== null) {
-      h = (360 - e.alpha) % 360; // Android
+      h = e.webkitCompassHeading; // iOS (and Chrome on Android) — works held upright
+    } else if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
+      h = tiltCompassHeading(e.alpha, e.beta, e.gamma); // any orientation
+      if (!isFinite(h) || (Math.abs(e.beta) < 10 && Math.abs(e.gamma) < 10)) {
+        return; // device essentially flat — heading undefined/noisy, keep last good reading
+      }
     }
-    heading = h;
+    // Smooth short-term jitter using the nearest arc so 359°->1° stays smooth
+    if (rawHeading >= 0) {
+      heading = heading + normalizeAngle(h - heading) * 0.35;
+    } else {
+      heading = h;
+    }
+    heading = (heading + 360) % 360;
+    rawHeading = h;
+
     const needle = document.getElementById('compass-needle');
     if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
+
+    // Re-point the arrow immediately as the phone turns (not just on GPS fixes)
+    if (gpsPos && dest) updateArrowRotation();
   };
   window.addEventListener('deviceorientation', orientationListener, true);
   document.getElementById('compass').classList.add('show');
