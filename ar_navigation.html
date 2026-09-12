@@ -21,7 +21,7 @@
   #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
 
   /* ── Mini Map (AR overlay, Google Maps style) ── */
-  #minimap-canvas{position:absolute;z-index:5;bottom:170px;left:12px;width:118px;height:118px;border-radius:16px;pointer-events:none;background:rgba(15,23,42,0.72);border:2px solid rgba(255,255,255,0.18);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,0.45);display:none}
+  #minimap-canvas{position:absolute;z-index:5;top:130px;right:14px;width:120px;height:120px;border-radius:16px;pointer-events:none;background:rgba(15,23,42,0.72);border:2px solid rgba(255,255,255,0.18);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,0.45);display:none}
 
   /* ── Loading ── */
   .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
@@ -1628,7 +1628,7 @@ function stopMapRender() {
 }
 
 /* ================================================================
-   MINI MAP (AR overlay, Google Maps style)
+   ROUTE GUIDE (AR overlay) - small square showing route to destination
    ================================================================ */
 function initMinimap() {
   if (minimapReady) return;
@@ -1641,7 +1641,7 @@ function initMinimap() {
 function handleMinimapResize() {
   if (!minimapCanvas) return;
   const dpr = window.devicePixelRatio || 1;
-  const size = 118;
+  const size = 120;
   minimapCanvas.width = size * dpr;
   minimapCanvas.height = size * dpr;
   minimapCanvas.style.width = size + 'px';
@@ -1662,158 +1662,133 @@ function stopMinimap() {
   if (minimapCanvas) minimapCanvas.style.display = 'none';
 }
 
-// Draw a simple polyline helper for the minimap (uses its own ctx)
-function minimapPolyline(ctx, pts) {
-  if (!pts || pts.length < 2) return;
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.stroke();
-}
-
-// Normalized 0..1 -> minimap local px (centred, heading-up, scaled)
-function minimapPoint(nx0, ny0, cx, cy, scale, headingRad) {
-  let dx = nx0 - 0.5;
-  let dy = ny0 - 0.5;
-  const cos = Math.cos(headingRad), sin = Math.sin(headingRad);
-  // rotate to heading-up (north points forward/up)
-  const rx = dx * cos - dy * sin;
-  const ry = dx * sin + dy * cos;
-  return { x: cx + rx * scale, y: cy + ry * scale };
-}
-
+// Route guide: shows "You" at the bottom with a path toward the destination.
+// It is heading-up (whatever direction you face points up on the square), so
+// the guide always shows the way to turn, plus the live distance remaining.
 function renderMinimap(ts) {
   if (!minimapCtx || !minimapCanvas || !gpsPos) {
     if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
     return;
   }
 
-  const size = 118;
+  const size = 120;
   const ctx = minimapCtx;
-  const cx = size / 2, cy = size / 2;
-
   ctx.clearRect(0, 0, size, size);
 
-  // Heading-up rotation
-  const headingRad = (heading * Math.PI) / 180;
-  const scale = 150; // px per unit of normalized distance
-
-  // User position in normalized coords
-  const user = gpsToNorm(gpsPos.lat, gpsPos.lng);
-
-  // Clip to rounded rect
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(0, 0, size, size, 14);
   ctx.clip();
 
-  // Background grid (subtle roads look)
-  ctx.fillStyle = 'rgba(15,23,42,0.6)';
+  ctx.fillStyle = 'rgba(15,23,42,0.72)';
   ctx.fillRect(0, 0, size, size);
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  for (let g = -4; g <= 4; g++) {
-    const gx = cx + g * (scale / 6);
-    const gy = cy + g * (scale / 6);
-    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(size, gy); ctx.stroke();
+
+  if (!dest || !BUILDINGS[dest]) {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 10px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Route guide', size / 2, size / 2 - 6);
+    ctx.font = '9px -apple-system, sans-serif';
+    ctx.fillText('pick a destination', size / 2, size / 2 + 8);
+    ctx.restore();
+    minimapAnimFrame = requestAnimationFrame(renderMinimap);
+    return;
   }
 
-  // Obstacles (building footprints) in heading-up space
-  OBSTACLES.forEach(o => {
-    const p = minimapPoint(o.x + o.w/2, o.y + o.h/2, cx, cy, scale, headingRad);
-    // approximate footprint (ignore rotation for readability)
-    const pw = o.w * scale;
-    const ph = o.h * scale;
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(-headingRad);
-    ctx.beginPath();
-    ctx.roundRect(-pw/2, -ph/2, pw, ph, 2);
-    ctx.fillStyle = 'rgba(107,114,128,0.85)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 0.75;
-    ctx.stroke();
-    ctx.restore();
-  });
+  const b = BUILDINGS[dest];
 
-  // Route: from user to destination (blue Google-Maps-like line)
-  const destMark = MARKERS[dest];
-  if (dest && destMark) {
-    const a = minimapPoint(user.x, user.y, cx, cy, scale, headingRad);
-    const b = minimapPoint(destMark[0], destMark[1], cx, cy, scale, headingRad);
-    // gentle S-curve so the path looks like a real route, not a straight shot
-    const midX = (a.x + b.x) / 2;
-    const midY = (a.y + b.y) / 2;
-    const cpx = midX - (b.y - a.y) * 0.25;
-    const cpy = midY + (b.x - a.x) * 0.25;
-    ctx.save();
-    ctx.strokeStyle = '#1d4ed8';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(cpx, cpy, b.x, b.y);
-    ctx.stroke();
-    // Direction arrowhead at destination end
-    const ang = Math.atan2(b.y - cpy, b.x - cpx);
-    ctx.fillStyle = '#1d4ed8';
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y);
-    ctx.lineTo(b.x - 9 * Math.cos(ang - 0.45), b.y - 9 * Math.sin(ang - 0.45));
-    ctx.lineTo(b.x - 9 * Math.cos(ang + 0.45), b.y - 9 * Math.sin(ang + 0.45));
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+  // Relative displacement (east, north) in metres
+  const dx = (b.lng - gpsPos.lng) * Math.cos(gpsPos.lat * Math.PI / 180) * 111320;
+  const dy = (b.lat - gpsPos.lat) * 110540;
+  const distM = Math.sqrt(dx * dx + dy * dy) || 1;
 
-    // Destination pin
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(b.x, b.y - 2, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ef4444';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    if (BUILDINGS[dest]) {
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 7px -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(BUILDINGS[dest].icon, b.x, b.y - 2 + 1);
-    }
-    ctx.restore();
-  }
+  // Scale the full distance into the little square
+  const scale = Math.min(48 / distM, 2.2);
 
-  // User location dot (centre)
-  ctx.save();
+  const userX = size / 2;
+  const userY = size - 18;
+
+  // Rotate so the direction you face (heading) points up on screen.
+  // forward = east*sin(h) + north*cos(h)  (screen-up), right = east*cos(h) - north*sin(h)
+  const hRad = (heading * Math.PI) / 180;
+  const fwd = dx * Math.sin(hRad) + dy * Math.cos(hRad);
+  const right = dx * Math.cos(hRad) - dy * Math.sin(hRad);
+  const destX = userX + right * scale;
+  const destY = userY - fwd * scale;
+
+  // Keep the pin inside the square even if the destination is behind you
+  const pinX = Math.min(108, Math.max(12, destX));
+  const pinY = Math.min(108, Math.max(12, destY));
+
+  // Gentle curve so it reads as a path
+  const midX = (userX + destX) / 2;
+  const midY = (userY + destY) / 2;
+  const cpx = midX - (pinY - userY) * 0.22;
+  const cpy = midY + (pinX - userX) * 0.22;
+
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(59,130,246,0.28)';
+  ctx.moveTo(userX, userY);
+  ctx.quadraticCurveTo(cpx, cpy, pinX, pinY);
+  ctx.stroke();
+
+  const ang = Math.atan2(pinY - cpy, pinX - cpx);
+  ctx.fillStyle = '#22c55e';
+  ctx.beginPath();
+  ctx.moveTo(pinX, pinY);
+  ctx.lineTo(pinX - 8 * Math.cos(ang - 0.45), pinY - 8 * Math.sin(ang - 0.45));
+  ctx.lineTo(pinX - 8 * Math.cos(ang + 0.45), pinY - 8 * Math.sin(ang + 0.45));
+  ctx.closePath();
   ctx.fill();
+
+  // Destination pin
   ctx.beginPath();
-  ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
-  ctx.fillStyle = '#3b82f6';
+  ctx.arc(pinX, pinY, 6.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ef4444';
   ctx.fill();
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // heading cone
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.arc(cx, cy, 12, -0.5, 0.5);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(59,130,246,0.2)';
-  ctx.fill();
-  ctx.restore();
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(b.icon, pinX, pinY + 3.5);
 
-  // North indicator (top-right)
-  ctx.save();
-  ctx.font = 'bold 9px -apple-system, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  ctx.fillText('N ↑', size - 8, 14);
-  ctx.restore();
+  const name = b.name.length > 16 ? b.name.substr(0, 16) + '...' : b.name;
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 8px -apple-system, sans-serif';
+  ctx.fillText(name, pinX, pinY + 18);
+
+  // "You" dot
+  ctx.beginPath();
+  ctx.arc(userX, userY, 7, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(59,130,246,0.22)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(userX, userY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#3b82f6';
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 8px -apple-system, sans-serif';
+  ctx.fillText('You', userX, userY + 17);
+
+  // Distance badge in the middle of the path
+  const distText = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest / 1000).toFixed(1) + 'km';
+  ctx.font = 'bold 10px -apple-system, sans-serif';
+  const tw = ctx.measureText(distText).width;
+  ctx.beginPath();
+  ctx.roundRect(midX - tw / 2 - 6, midY - 9, tw + 12, 18, 9);
+  ctx.fillStyle = 'rgba(9,15,28,0.85)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(34,197,94,0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#22c55e';
+  ctx.fillText(distText, midX, midY + 3);
 
   ctx.restore();
 
