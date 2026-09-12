@@ -130,7 +130,6 @@
   .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,0,0,.85);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-
   /* ── Search Overlay ── */
   .search-overlay{position:absolute;inset:0;z-index:45;background:#0f172a;display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.16,1,.3,1),opacity .3s}
   .search-overlay.hidden{transform:translateY(100%);opacity:0;pointer-events:none}
@@ -159,6 +158,18 @@
   .map-view.show{display:block}
   .map-canvas-wrap{width:100%;height:100%;position:relative;overflow:hidden}
   #map-canvas{width:100%;height:100%;display:block}
+#gm-map{position:absolute;top:0;left:0;width:100%;height:100%;border:0;z-index:1;background:#e8eaed;display:block}
+.gm-lock-note{position:absolute;top:0;left:0;right:0;z-index:3;padding:6px 10px;font-size:11px;color:#1e293b;background:linear-gradient(180deg,rgba(255,255,255,.6),rgba(255,255,255,0));text-align:center;pointer-events:none}
+.gm-overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
+#gm-routes{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+#gm-markers{position:absolute;top:0;left:0;width:100%;height:100%}
+.gm-marker{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;cursor:pointer;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.93);border:2px solid rgba(15,23,42,.35);border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.35);font-size:13px}
+.gm-marker.is-dest{width:26px;height:26px;border-radius:13px;background:#ef4444;border-color:#fff;box-shadow:0 2px 10px rgba(239,68,68,.65)}
+.gm-marker-name{display:none;position:absolute;left:50%;bottom:calc(100% + 4px);transform:translateX(-50%);background:rgba(15,23,42,.88);color:#fff;font-size:11px;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.gm-marker:hover .gm-marker-name{display:block}
+#gm-gps{position:absolute;pointer-events:none}
+.gm-gps-dot{width:15px;height:15px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 0 6px rgba(59,130,246,.22),0 1px 4px rgba(0,0,0,.45);transform:translate(-50%,-50%)}
+.gm-type-btn{width:46px;height:30px;border-radius:9px;font-size:11px;font-weight:700;color:#1e293b}
   .map-controls{position:absolute;right:14px;bottom:220px;z-index:12;display:flex;flex-direction:column;gap:8px}
   .map-ctrl-btn{width:42px;height:42px;border-radius:12px;border:none;background:rgba(255,255,255,.92);color:#1e293b;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.15);cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
   .map-user-btn{position:absolute;right:14px;bottom:280px;z-index:12;width:42px;height:42px;border-radius:50%;border:none;background:rgba(255,255,255,.92);color:var(--blue);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.15);cursor:pointer}
@@ -323,7 +334,13 @@
   <!-- Map View -->
   <div class="map-view" id="map-view">
     <div class="map-canvas-wrap">
-      <canvas id="map-canvas"></canvas>
+      <div class="gm-lock-note">Google Maps · CSU Aparri Campus</div>
+      <iframe id="gm-map" title="CSU Aparri campus map (Google Maps)" allowfullscreen referrerpolicy="no-referrer-when-downgrade" loading="eager"></iframe>
+      <div class="gm-overlay" id="gm-overlay">
+        <svg id="gm-routes"></svg>
+        <div id="gm-markers"></div>
+        <div id="gm-gps"></div>
+      </div>
     </div>
     <div class="map-topbar">
       <button class="topbar-btn" onclick="closeMapView()" aria-label="Back">
@@ -367,6 +384,8 @@
       <button class="map-ctrl-btn" onclick="zoomMap(-0.3)" aria-label="Zoom out">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
+      <button class="map-ctrl-btn gm-type-btn" onclick="setGmType('m')">Map</button>
+      <button class="map-ctrl-btn gm-type-btn" onclick="setGmType('h')">Sat</button>
     </div>
     <button class="map-back-btn show" id="map-search-btn" onclick="openSearch()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -495,7 +514,6 @@ window.addEventListener('load', async () => {
     openSearch();
   }
 });
-
 
 function hideLoading() {
   document.getElementById('loading').classList.add('hidden');
@@ -1268,32 +1286,33 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ================================================================
-   MAP VIEW — Google Maps-style campus map
+   MAP VIEW — Google Maps embed (whole CSU-A campus, no API key)
    ================================================================ */
-let mapCanvas, mapCtx;
+
 let mapReady = false;
 let mapDest = null;
-let mapDragging = false;
-let mapDragStart = {x:0, y:0};
-let mapOffset = {x:0, y:0};
-let mapLastOffset = {x:0, y:0};
-let mapZoom = 1;
 let mapAnimFrame = null;
-let mapImg = null;
-let mapImgLoaded = false;
+let gmPaintedDest = null;
+let gmAutoFit = true;   // auto-zoom so the whole campus fits until the user zooms
+
+// Google Maps embed state — centred on the whole campus so only CSU-A stays
+// in view. The free embed (output=embed) needs no API key.
+let gmCenter = { lat: 18.3519556, lng: 121.6485908 };
+let GM_ZOOM = 18;
+let gmMapType = 'm';   // m = roadmap, h = satellite/hybrid
+
+// Campus bounding box (padded so every building + margin stays visible).
+// Everything outside this box is dimmed by an overlay so only the campus shows.
+const GM_BOUNDS = {
+  sw: { lat: 18.35031, lng: 121.64650 },
+  ne: { lat: 18.35360, lng: 121.65066 }
+};
 
 // Mini map (AR overlay) state
 let minimapCanvas = null;
 let minimapCtx = null;
 let minimapAnimFrame = null;
 let minimapReady = false;
-
-// Map image aspect ratio (matches assets/csu_map.png => 1672 x 941)
-const MAP_ASPECT = 1672 / 941;
-
-// Building footprints ("obstacles") drawn as solid blocks on the map so the
-// navigation paths appear to route around real structures, like a floor plan.
-// Each is {x, y, w, h} in normalized (0..1) map coords, centred on its marker.
 
 // Hand-traced routes (normalized 0..1 relative to csu_map.png), ported
 // verbatim from lib/data/campus_routes_data.dart so the web map shows the
@@ -1355,6 +1374,13 @@ const OBSTACLES = buildObstacles();
 // buildings with verified real GPS coordinates vs their traced markers, so the
 // GPS dot lands as close as possible to the correct spot on the blueprint.
 const GPS_TO_NORM = { m11: 133.340544, b1: -16220.196369, m22: -175.957048, b2: 3229.424686 };
+
+// GPS -> normalized map coords (affine calibration to traced anchors)
+function gpsToNorm(lat, lng) {
+  const x = GPS_TO_NORM.m11 * lng + GPS_TO_NORM.b1;
+  const y = GPS_TO_NORM.m22 * lat + GPS_TO_NORM.b2;
+  return { x, y };
+}
 
 function showMapFromAR() {
   stopMinimap();
@@ -1430,418 +1456,175 @@ function closeMapView() {
   }
 }
 
-function initMapCanvas() {
-  if (mapReady) {
-    handleMapResize();
-    return;
+// Web-mercator projection of a lat/lng into viewport px for the current embed
+// centre/zoom, so the overlay lines up exactly with the Google tiles.
+function gmProject(lat, lng) {
+  const world = 256 * Math.pow(2, GM_ZOOM);
+  const px = lngv => ((lngv + 180) / 360) * world;
+  const py = latv => {
+    const s = Math.sin((latv * Math.PI) / 180);
+    return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * world;
+  };
+  return {
+    x: window.innerWidth / 2 + (px(lng) - px(gmCenter.lng)),
+    y: window.innerHeight / 2 + (py(lat) - py(gmCenter.lat))
+  };
+}
+
+// Inverse calibration: normalized blueprint (0..1) -> GPS lat/lng
+function normToGps(nx0, ny0) {
+  return { lat: (ny0 - GPS_TO_NORM.b2) / GPS_TO_NORM.m22, lng: (nx0 - GPS_TO_NORM.b1) / GPS_TO_NORM.m11 };
+}
+
+// pick the largest integer zoom where the whole campus fits the screen
+function pickDefaultZoom() {
+  for (let z = 20; z >= 15; z--) {
+    const old = GM_ZOOM;
+    GM_ZOOM = z;
+    const sw = gmProject(GM_BOUNDS.sw.lat, GM_BOUNDS.sw.lng);
+    const ne = gmProject(GM_BOUNDS.ne.lat, GM_BOUNDS.ne.lng);
+    GM_ZOOM = old;
+    if (Math.abs(ne.x - sw.x) <= window.innerWidth * 0.97 && Math.abs(ne.y - sw.y) <= window.innerHeight * 0.94) return z;
   }
-  mapCanvas = document.getElementById('map-canvas');
-  mapCtx = mapCanvas.getContext('2d');
-  handleMapResize();
+  return 15;
+}
+
+// (Re)load the free Google Maps embed and repaint the overlay
+function loadGmMap() {
+  if (gmAutoFit) GM_ZOOM = pickDefaultZoom();
+  const ifr = document.getElementById('gm-map');
+  if (ifr) {
+    ifr.src = 'https://www.google.com/maps?q=' + gmCenter.lat.toFixed(6) + ',' + gmCenter.lng.toFixed(6) +
+              '&z=' + GM_ZOOM + '&t=' + gmMapType + '&hl=en&output=embed';
+  }
+  gmPaintedDest = null;
+  buildGmMarkers();
+  startMapRender();
+}
+
+function buildGmMarkers() {
+  const box = document.getElementById('gm-markers');
+  if (!box) return;
+  box.innerHTML = '';
+  Object.entries(BUILDINGS).forEach(([key, b]) => {
+    const isDest = key === mapDest;
+    const p = gmProject(b.lat, b.lng);
+    const el = document.createElement('div');
+    el.className = 'gm-marker' + (isDest ? ' is-dest' : '');
+    el.style.left = p.x + 'px';
+    el.style.top = p.y + 'px';
+    el.innerHTML = b.icon + '<span class="gm-marker-name">' + b.name + '</span>';
+    if (!isDest) el.onclick = () => showMapView(key);
+    box.appendChild(el);
+  });
+}
+
+// Repaint dim/route/accuracy SVG layer (cheap enough to refresh every frame)
+function renderGmDynamic() {
+  const svg = document.getElementById('gm-routes');
+  if (!svg) return;
+  const W = window.innerWidth, H = window.innerHeight;
+
+  if (gmPaintedDest !== mapDest) { gmPaintedDest = mapDest; buildGmMarkers(); }
+
+  let s = '';
+
+  // Dim everything outside the campus so only CSU-A remains visible
+  const swP = gmProject(GM_BOUNDS.sw.lat, GM_BOUNDS.sw.lng);
+  const neP = gmProject(GM_BOUNDS.ne.lat, GM_BOUNDS.ne.lng);
+  const bx = Math.min(swP.x, neP.x), by = Math.min(swP.y, neP.y);
+  const bw = Math.abs(neP.x - swP.x), bh = Math.abs(neP.y - swP.y);
+  s += '<path d="M0,0H' + W + 'V' + H + 'H0Z M' + bx + ',' + by + 'H' + (bx + bw) + 'V' + (by + bh) + 'H' + bx + 'Z' +
+       '" fill="rgba(6,12,26,0.52)" fill-rule="evenodd" pointer-events="none"></path>';
+  s += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh +
+       '" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none"></rect>';
+
+  // Certified route polyline (blueprint route -> GPS -> screen px), green
+  if (mapDest && ROUTES[mapDest]) {
+    const pts = ROUTES[mapDest].map(p0 => { const g = normToGps(p0[0], p0[1]); return gmProject(g.lat, g.lng); });
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    s += '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>';
+    s += '<path d="' + d + '" fill="none" stroke="#22c55e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>';
+  }
+
+  // GPS accuracy ring
+  if (gpsPos && gpsPos.acc) {
+    const u = gmProject(gpsPos.lat, gpsPos.lng);
+    const res = 156543.03392 * Math.cos((gpsPos.lat * Math.PI) / 180) / Math.pow(2, GM_ZOOM);
+    const r = Math.max(12, gpsPos.acc / res);
+    s += '<circle cx="' + u.x.toFixed(1) + '" cy="' + u.y.toFixed(1) + '" r="' + r.toFixed(1) +
+         '" fill="rgba(59,130,246,0.10)" stroke="rgba(59,130,246,0.28)" stroke-width="1" pointer-events="none"></circle>';
+  }
+
+  svg.innerHTML = s;
+}
+
+function initMapCanvas() {
+  if (mapReady) { handleMapResize(); return; }
   window.addEventListener('resize', handleMapResize);
-
-  // Load campus map image
-  mapImg = new Image();
-  mapImg.onload = () => { mapImgLoaded = true; };
-  mapImg.onerror = () => { mapImgLoaded = false; };
-  mapImg.src = 'csu_map.png';
-
-  // Touch/mouse drag for panning
-  setupMapDrag();
+  loadGmMap();
   mapReady = true;
 }
 
 function handleMapResize() {
-  if (!mapCanvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  mapCanvas.width = w * dpr;
-  mapCanvas.height = h * dpr;
-  mapCanvas.style.width = w + 'px';
-  mapCanvas.style.height = h + 'px';
-  if (mapCtx) mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  renderGmDynamic();
+  updateGmUser();
 }
 
-function setupMapDrag() {
-  const el = mapCanvas;
-  let startX, startY;
-
-  function onStart(x, y) {
-    mapDragging = true;
-    startX = x;
-    startY = y;
-    mapLastOffset = {...mapOffset};
+function updateGmUser() {
+  renderGmDynamic();
+  const gpsEl = document.getElementById('gm-gps');
+  if (!gpsEl) return;
+  if (gpsPos) {
+    const g = gmProject(gpsPos.lat, gpsPos.lng);
+    gpsEl.style.left = g.x + 'px';
+    gpsEl.style.top = g.y + 'px';
+    gpsEl.innerHTML = '<div class="gm-gps-dot"></div>';
+  } else {
+    gpsEl.innerHTML = '';
   }
-
-  function onMove(x, y) {
-    if (!mapDragging) return;
-    mapOffset.x = mapLastOffset.x + (x - startX);
-    mapOffset.y = mapLastOffset.y + (y - startY);
-  }
-
-  function onEnd() {
-    mapDragging = false;
-  }
-
-  el.addEventListener('touchstart', e => { e.preventDefault(); onStart(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-  el.addEventListener('touchmove', e => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-  el.addEventListener('touchend', onEnd);
-  el.addEventListener('mousedown', e => onStart(e.clientX, e.clientY));
-  el.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
-  el.addEventListener('mouseup', onEnd);
-  el.addEventListener('mouseleave', onEnd);
-
-  // Scroll wheel zoom
-  el.addEventListener('wheel', e => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    mapZoom = Math.max(0.5, Math.min(4, mapZoom + delta));
-  }, {passive:false});
-}
-
-// Compute the displayed rect of the map image (preserves aspect ratio).
-// The image is fitted to the screen and then scaled by mapZoom and panned
-// by mapOffset. Normalized (0..1) route coords map onto this rect exactly.
-function getMapRect(w, h) {
-  let baseW = w * 0.95;
-  let baseH = baseW / MAP_ASPECT;
-  if (baseH > h * 0.95) {
-    baseH = h * 0.95;
-    baseW = baseH * MAP_ASPECT;
-  }
-  const rectW = baseW * mapZoom;
-  const rectH = baseH * mapZoom;
-  const centerX = w / 2 + mapOffset.x;
-  const centerY = h / 2 + mapOffset.y;
-  return {
-    x: centerX - rectW / 2,
-    y: centerY - rectH / 2,
-    w: rectW,
-    h: rectH
-  };
-}
-
-// Normalized (0..1) map coords -> screen px
-function nx(nx, w, h) {
-  const r = getMapRect(w, h);
-  return r.x + nx * r.w;
-}
-function ny(ny, w, h) {
-  const r = getMapRect(w, h);
-  return r.y + ny * r.h;
-}
-
-// GPS -> normalized map coords (affine calibration to traced anchors)
-function gpsToNorm(lat, lng) {
-  const x = GPS_TO_NORM.m11 * lng + GPS_TO_NORM.b1;
-  const y = GPS_TO_NORM.m22 * lat + GPS_TO_NORM.b2;
-  return { x, y };
-}
-
-function centerOnNorm(x, y) {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const sx = nx(x, w, h);
-  const sy = ny(y, w, h);
-  mapOffset.x += (w / 2 - sx);
-  mapOffset.y += (h / 2 - sy);
-  mapLastOffset = {...mapOffset};
 }
 
 function centerMapOnDest() {
-  if (!mapDest || !mapCanvas) return;
-  const m = MARKERS[mapDest];
-  if (m) centerOnNorm(m[0], m[1]);
+  // Keep the whole campus in view; the red dest pin + green route highlight it
+  gmCenter = {
+    lat: (GM_BOUNDS.sw.lat + GM_BOUNDS.ne.lat) / 2,
+    lng: (GM_BOUNDS.sw.lng + GM_BOUNDS.ne.lng) / 2
+  };
+  loadGmMap();
 }
 
 function recenterMap() {
-  if (mapDest && MARKERS[mapDest]) {
-    centerMapOnDest();
-  } else if (gpsPos) {
-    const n = gpsToNorm(gpsPos.lat, gpsPos.lng);
-    centerOnNorm(n.x, n.y);
+  if (gpsPos) {
+    gmCenter = { lat: gpsPos.lat, lng: gpsPos.lng };
   } else {
-    centerOnNorm(0.5, 0.5);
+    gmCenter = {
+      lat: (GM_BOUNDS.sw.lat + GM_BOUNDS.ne.lat) / 2,
+      lng: (GM_BOUNDS.sw.lng + GM_BOUNDS.ne.lng) / 2
+    };
   }
+  loadGmMap();
 }
 
 function zoomMap(delta) {
-  mapZoom = Math.max(0.5, Math.min(4, mapZoom + delta));
+  gmAutoFit = false;
+  GM_ZOOM = Math.max(15, Math.min(20, GM_ZOOM + (delta > 0 ? 1 : -1)));
+  loadGmMap();
+}
+
+function setGmType(t) {
+  gmMapType = t;
+  loadGmMap();
 }
 
 function startMapRender() {
   if (mapAnimFrame) cancelAnimationFrame(mapAnimFrame);
-  mapAnimFrame = requestAnimationFrame(renderMap);
+  const tick = () => { updateGmUser(); mapAnimFrame = requestAnimationFrame(tick); };
+  mapAnimFrame = requestAnimationFrame(tick);
 }
 
 function stopMapRender() {
   if (mapAnimFrame) { cancelAnimationFrame(mapAnimFrame); mapAnimFrame = null; }
-}
-
-function renderMap(ts) {
-  if (!mapCtx || !mapCanvas) return;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-
-  mapCtx.clearRect(0, 0, w, h);
-  mapCtx.fillStyle = '#111827';
-  mapCtx.fillRect(0, 0, w, h);
-
-  // Draw the campus map image into the fitted rect
-  if (mapImgLoaded && mapImg) {
-    const r = getMapRect(w, h);
-    mapCtx.save();
-    mapCtx.drawImage(mapImg, r.x, r.y, r.w, r.h);
-    mapCtx.restore();
-  }
-
-  // Draw route path (traced, from kiosk start -> destination)
-  if (mapDest && ROUTES[mapDest]) {
-    drawMapRoute(w, h, ts);
-  }
-
-  // Draw obstacles (building footprints)
-  drawObstacles(w, h);
-
-  // Draw building markers at their traced normalized positions
-  drawBuildingMarkers(w, h, ts);
-
-  // Draw GPS "you are here" dot
-  drawUserPosition(w, h);
-
-  // GPS waiting prompt
-  if (!gpsPos) {
-    mapCtx.save();
-    mapCtx.fillStyle = 'rgba(0,0,0,0.45)';
-    mapCtx.fillRect(0, 0, w, h);
-    mapCtx.fillStyle = '#fff';
-    mapCtx.textAlign = 'center';
-    mapCtx.font = '15px -apple-system, BlinkMacSystemFont, sans-serif';
-    mapCtx.fillText('📡 Acquiring your location...', w / 2, h / 2 - 10);
-    mapCtx.fillStyle = 'rgba(255,255,255,0.6)';
-    mapCtx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
-    mapCtx.fillText('Your location marker will appear here', w / 2, h / 2 + 14);
-    mapCtx.restore();
-  }
-
-  mapAnimFrame = requestAnimationFrame(renderMap);
-}
-
-function drawObstacles(w, h) {
-  OBSTACLES.forEach(o => {
-    const sx = nx(o.x + o.w/2, w, h);
-    const sy = ny(o.y + o.h/2, w, h);
-    if (sx < -80 || sx > w + 80 || sy < -80 || sy > h + 80) return;
-
-    const px = nx(o.x, w, h);
-    const py = ny(o.y, w, h);
-    const pw = Math.abs(nx(o.x + o.w, w, h) - px);
-    const ph = Math.abs(ny(o.y + o.h, w, h) - py);
-
-    mapCtx.save();
-    // Shadow
-    mapCtx.beginPath();
-    mapCtx.roundRect(px + 2, py + 3, pw, ph, 3);
-    mapCtx.fillStyle = 'rgba(0,0,0,0.30)';
-    mapCtx.fill();
-    // Building body
-    mapCtx.beginPath();
-    mapCtx.roundRect(px, py, pw, ph, 3);
-    mapCtx.fillStyle = '#4b5563';
-    mapCtx.fill();
-    mapCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-    mapCtx.lineWidth = 1;
-    mapCtx.stroke();
-    // Icon label (small)
-    mapCtx.fillStyle = 'rgba(255,255,255,0.85)';
-    mapCtx.font = 'bold 9px -apple-system, BlinkMacSystemFont, sans-serif';
-    mapCtx.textAlign = 'center';
-    mapCtx.textBaseline = 'middle';
-    mapCtx.fillText(o.icon, px + pw/2, py + ph/2);
-    mapCtx.restore();
-  });
-}
-
-function drawBuildingMarkers(w, h, ts) {
-  Object.entries(MARKERS).forEach(([key, m]) => {
-    const sx = nx(m[0], w, h);
-    const sy = ny(m[1], w, h);
-    if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) return;
-    const b = BUILDINGS[key];
-    const isDest = key === mapDest;
-
-    mapCtx.save();
-    if (isDest) {
-      // Destination pin (tip at marker point)
-      // shadow
-      mapCtx.beginPath();
-      mapCtx.ellipse(sx, sy + 16, 8, 3, 0, 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(0,0,0,0.25)';
-      mapCtx.fill();
-      // pin body
-      mapCtx.beginPath();
-      mapCtx.moveTo(sx, sy + 16);
-      mapCtx.bezierCurveTo(sx - 11, sy, sx - 11, sy - 14, sx, sy - 16);
-      mapCtx.bezierCurveTo(sx + 11, sy - 14, sx + 11, sy, sx, sy + 16);
-      mapCtx.closePath();
-      mapCtx.fillStyle = '#ef4444';
-      mapCtx.fill();
-      mapCtx.strokeStyle = '#fff';
-      mapCtx.lineWidth = 2;
-      mapCtx.stroke();
-      // inner circle
-      mapCtx.beginPath();
-      mapCtx.arc(sx, sy - 4, 5, 0, Math.PI * 2);
-      mapCtx.fillStyle = '#fff';
-      mapCtx.fill();
-      // pulsing ring
-      const phase = ((ts / 1000) % 2) / 2;
-      mapCtx.beginPath();
-      mapCtx.arc(sx, sy - 4, 14 + phase * 22, 0, Math.PI * 2);
-      mapCtx.strokeStyle = 'rgba(239,68,68,' + ((1 - phase) * 0.4) + ')';
-      mapCtx.lineWidth = 2;
-      mapCtx.stroke();
-      // label
-      if (b) {
-        mapCtx.fillStyle = '#fff';
-        mapCtx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
-        mapCtx.textAlign = 'center';
-        mapCtx.fillText(b.icon + ' ' + b.name, sx, sy - 26);
-      }
-    } else {
-      // regular building small dot at traced marker
-      mapCtx.beginPath();
-      mapCtx.arc(sx, sy, 5, 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(148,163,184,0.65)';
-      mapCtx.fill();
-      mapCtx.strokeStyle = 'rgba(0,0,0,0.4)';
-      mapCtx.lineWidth = 1;
-      mapCtx.stroke();
-      if (b && mapZoom >= 1.2) {
-        mapCtx.fillStyle = 'rgba(255,255,255,0.55)';
-        mapCtx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
-        mapCtx.textAlign = 'center';
-        mapCtx.fillText(b.icon + ' ' + b.name, sx, sy - 10);
-      }
-    }
-    mapCtx.restore();
-  });
-}
-
-function drawUserPosition(w, h) {
-  if (!gpsPos) return;
-  const n = gpsToNorm(gpsPos.lat, gpsPos.lng);
-  const sx = nx(n.x, w, h);
-  const sy = ny(n.y, w, h);
-  if (sx < -60 || sx > w + 60 || sy < -60 || sy > h + 60) return;
-
-  mapCtx.save();
-
-  // Accuracy circle
-  if (gpsPos.acc) {
-    const accPx = (gpsPos.acc / 111000) * (getMapRect(w, h).w);
-    mapCtx.beginPath();
-    mapCtx.arc(sx, sy, Math.max(12, accPx), 0, Math.PI * 2);
-    mapCtx.fillStyle = 'rgba(59,130,246,0.10)';
-    mapCtx.fill();
-    mapCtx.strokeStyle = 'rgba(59,130,246,0.18)';
-    mapCtx.lineWidth = 1;
-    mapCtx.stroke();
-  }
-
-  // Outer glow
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 12, 0, Math.PI * 2);
-  mapCtx.fillStyle = 'rgba(59,130,246,0.25)';
-  mapCtx.fill();
-  // Blue dot
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 7, 0, Math.PI * 2);
-  mapCtx.fillStyle = '#3b82f6';
-  mapCtx.fill();
-  mapCtx.strokeStyle = '#fff';
-  mapCtx.lineWidth = 2.5;
-  mapCtx.stroke();
-  // Inner white
-  mapCtx.beginPath();
-  mapCtx.arc(sx, sy, 2.5, 0, Math.PI * 2);
-  mapCtx.fillStyle = '#fff';
-  mapCtx.fill();
-  // Heading indicator
-  if (heading > 0) {
-    const headRad = (heading * Math.PI) / 180;
-    mapCtx.beginPath();
-    mapCtx.moveTo(sx, sy);
-    mapCtx.lineTo(sx + Math.sin(headRad) * 22, sy - Math.cos(headRad) * 22);
-    mapCtx.strokeStyle = 'rgba(59,130,246,0.5)';
-    mapCtx.lineWidth = 2;
-    mapCtx.stroke();
-  }
-  // Label
-  mapCtx.fillStyle = '#3b82f6';
-  mapCtx.font = 'bold 10px -apple-system, BlinkMacSystemFont, sans-serif';
-  mapCtx.textAlign = 'center';
-  mapCtx.fillText('You are here', sx, sy - 18);
-
-  mapCtx.restore();
-}
-
-function drawMapRoute(w, h, ts) {
-  const pts = ROUTES[mapDest];
-  if (!pts || pts.length < 2) return;
-
-  const screenPts = pts.map(p => ({ x: nx(p[0], w, h), y: ny(p[1], w, h) }));
-
-  mapCtx.save();
-
-  // Shadow/outline
-  mapCtx.beginPath();
-  screenPts.forEach((p, i) => {
-    if (i === 0) mapCtx.moveTo(p.x, p.y);
-    else mapCtx.lineTo(p.x, p.y);
-  });
-  mapCtx.strokeStyle = 'rgba(0,0,0,0.35)';
-  mapCtx.lineWidth = 8;
-  mapCtx.lineCap = 'round';
-  mapCtx.lineJoin = 'round';
-  mapCtx.stroke();
-
-  // Animated green route line (same colour/style as kiosk walking route)
-  mapCtx.beginPath();
-  screenPts.forEach((p, i) => {
-    if (i === 0) mapCtx.moveTo(p.x, p.y);
-    else mapCtx.lineTo(p.x, p.y);
-  });
-  mapCtx.strokeStyle = '#22c55e';
-  mapCtx.lineWidth = 4;
-  mapCtx.lineCap = 'round';
-  mapCtx.lineJoin = 'round';
-  const dashOffset = (Date.now() / 50) % 20;
-  mapCtx.setLineDash([10, 10]);
-  mapCtx.lineDashOffset = -dashOffset;
-  mapCtx.stroke();
-  mapCtx.setLineDash([]);
-
-  // Walking dots
-  const dotSpacing = 40;
-  let accum = 0;
-  for (let i = 1; i < screenPts.length; i++) {
-    const p1 = screenPts[i - 1], p2 = screenPts[i];
-    const segLen = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
-    let d = (dotSpacing - (accum % dotSpacing)) % dotSpacing;
-    while (d < segLen) {
-      const frac = d / segLen;
-      mapCtx.beginPath();
-      mapCtx.arc(p1.x + (p2.x - p1.x) * frac, p1.y + (p2.y - p1.y) * frac, 2.5, 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(255,255,255,0.6)';
-      mapCtx.fill();
-      d += dotSpacing;
-    }
-    accum += segLen;
-  }
-
-  mapCtx.restore();
 }
 
 /* ================================================================
