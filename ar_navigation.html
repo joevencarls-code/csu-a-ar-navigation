@@ -344,6 +344,10 @@ const BUILDINGS = {
     aliases:['library','books','study','lrc','learning'] },
   avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'168m', time:'~2 min', lat:18.351438787450356, lng:121.65031967108017,
     steps:['Start at the main entrance','Walk straight for 134m and turn left','Walk straight for 20m, then bear a little left','Walk for 14m and the AVR Building is ahead'],
+    waypoints:[
+      {lat:18.351699942197545, lng:121.65040702249051, label:'Turn left'},
+      {lat:18.351563427984562, lng:121.65028840494261, label:'Bear a little left'}
+    ],
     aliases:['avr','audio','visual','presentation','media'] },
   canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.352569667318097, lng:121.64997179523256,
     steps:['Start at the main entrance','Walk west on the main road','Turn right at the road corner','Continue north toward the canteen','Canteen is on your left'],
@@ -1302,6 +1306,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   initFeedbackUI();
   flushPendingFeedback();
+  deriveMissingWaypoints();
 });
 /* ================================================================
    ROUTE DATA — CSU-A Campus
@@ -1356,6 +1361,45 @@ const GPS_TO_NORM = { m11: 133.610117, b1: -16252.991899, m22: -179.367782, b2: 
 // Normalized blueprint (0..1) -> GPS lat/lng (inverse of the affine fit)
 function normToGps(nx0, ny0) {
   return { lat: (ny0 - GPS_TO_NORM.b2) / GPS_TO_NORM.m22, lng: (nx0 - GPS_TO_NORM.b1) / GPS_TO_NORM.m11 };
+}
+
+// Buildings without field-verified turn waypoints get them derived from the
+// hand-traced ROUTES polyline (converted to GPS by the affine fit). The route
+// is sampled uniformly along its length so each step past the start gets a
+// real GPS anchor spread across the whole walk, advancing steps by GPS
+// proximity instead of the old percentage guesswork.
+function deriveMissingWaypoints() {
+  for (const key of Object.keys(BUILDINGS)) {
+    const b = BUILDINGS[key];
+    if (b.waypoints && b.waypoints.length > 0) continue;
+    const route = ROUTES[key];
+    const segs = b.steps.length - 1;   // anchors needed = steps after "Start"
+    if (!route || route.length < 2 || segs <= 0) continue;
+
+    const pts = route.map(p => normToGps(p[0], p[1]));
+    // Cumulative distance along the route.
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) {
+      cum.push(cum[i - 1] + haversine(pts[i-1].lat, pts[i-1].lng, pts[i].lat, pts[i].lng));
+    }
+    const total = cum[cum.length - 1];
+    if (total <= 0) continue;
+
+    const wps = [];
+    for (let s = 1; s <= segs; s++) {
+      const target = (s / segs) * total; // walk s/segs of the route
+      // Find the polyline segment containing `target` and interpolate.
+      let i = 1;
+      while (i < cum.length - 1 && cum[i] < target) i++;
+      const t = (cum[i] - cum[i-1]) > 0 ? (target - cum[i-1]) / (cum[i] - cum[i-1]) : 0;
+      wps.push({
+        lat: pts[i-1].lat + (pts[i].lat - pts[i-1].lat) * t,
+        lng: pts[i-1].lng + (pts[i].lng - pts[i-1].lng) * t,
+        label: 'Along the route'
+      });
+    }
+    b.waypoints = wps;
+  }
 }
 
 /* ================================================================
