@@ -329,8 +329,12 @@ const BUILDINGS = {
   gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.352466469429963, lng:121.65024244013327,
     steps:['Start at the main entrance','Walk west on the main road','Turn right at the road junction','Gymplex is straight ahead'],
     aliases:['gymplex','gym','gymnasium','sports','basketball'] },
-  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352341893509394, lng:121.65059449475766,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right at the junction','Turn right again after the Gymplex','Gatchalian Building is on your left'],
+  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352329598700887, lng:121.6505757211261,
+    steps:['Start at the main entrance','Turn left at the first intersection','Turn left again at the second intersection','Gatchalian Building is ahead – You have arrived to your destination'],
+    waypoints:[
+      {lat:18.35181949034487, lng:121.65026805406575, label:'First turn left'},
+      {lat:18.352278201217583, lng:121.65036764132986, label:'Second turn left'}
+    ],
     aliases:['gatchalian','hall'] },
   cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'160m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
     steps:['Start at the main entrance','Walk west on the main road','Turn right before the Gymplex junction','CICS Building is on your left'],
@@ -617,18 +621,36 @@ function updateDistanceAndBearing() {
 }
 
 function autoAdvanceByDistance() {
-  if (!dest || arrived) return;
+  if (!dest || arrived || !gpsPos) return;
   const b = BUILDINGS[dest];
   const totalSteps = b.steps.length;
   if (totalSteps <= 1) return;
 
-  // Total route length = distance from first GPS fix to destination.
-  // If GPS hasn't locked yet, fall back to the building's nominal distance.
+  // If this building has GPS waypoints, advance based on remaining distance thresholds
+  if (b.waypoints && b.waypoints.length > 0) {
+    // thresholds[i] = trigger step i+1 when distToDest drops below this value (metres)
+    const thresholds = [150, 52, 22];
+    let newStep = stepIdx;
+    for (let i = 0; i < Math.min(b.waypoints.length, thresholds.length); i++) {
+      if (distToDest < thresholds[i]) {
+        newStep = Math.max(newStep, i + 1);
+      }
+    }
+    newStep = Math.min(newStep, totalSteps - 1);
+
+    if (newStep > stepIdx) {
+      stepIdx = newStep;
+      refreshUI();
+      showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
+    }
+    return;
+  }
+
+  // Fallback: percentage-based auto-advance for buildings without waypoints
   const total = startDist || parseFloat(b.dist) || 200;
   if (total <= 0) return;
-  const remainingFraction = distToDest / total; // 1 = at start, 0 = arrived
+  const remainingFraction = distToDest / total;
 
-  // Advance to step i+1 once the remaining fraction drops below threshold[i]
   const thresholds = [0.95, 0.7, 0.45, 0.25, 0.1];
   const maxStep = Math.min(totalSteps - 1, thresholds.length);
 
