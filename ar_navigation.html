@@ -320,14 +320,23 @@
    ================================================================ */
 const BUILDINGS = {
 
-  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'180m', time:'~2 min', lat:18.35120653118311, lng:121.64998763822749,
-    steps:['Start at the main entrance gate','Head straight along the main road westward','Pass the flagpole on your left','Administration Building is on your right'],
+  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'280m', time:'~4 min', lat:18.35123406520377, lng:121.64988793607472,
+    steps:['Start at the main entrance gate','Walk straight for 200m and turn left','Walk straight for 40m and turn left','Walk straight for 20m and turn right','Walk for 20m and the Administration Building is ahead'],
+    waypoints:[
+      {lat:18.351825411046327, lng:121.64978807763937, label:'Turn left'},
+      {lat:18.351461804646284, lng:121.64971911587419, label:'Turn left'},
+      {lat:18.351409532381442, lng:121.64990107264106, label:'Turn right'}
+    ],
     aliases:['admin','registrar','hrdo','guidance','finance','admission'] },
   cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'430m', time:'~5 min', lat:18.352268721573235, lng:121.64765987770043,
     steps:['Start at the main entrance','Walk straight for 430m and CTE Building is ahead'],
     aliases:['cte','teacher','education','teaching'] },
-  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.352466469429963, lng:121.65024244013327,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road junction','Gymplex is straight ahead'],
+  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'217m', time:'~3 min', lat:18.352380544084607, lng:121.65024011381233,
+    steps:['Start at the main entrance','Walk straight for 150m and turn right','Walk straight for 50m, then bear a little left','Walk for 17m and the Gymplex is ahead'],
+    waypoints:[
+      {lat:18.351816240528287, lng:121.65027829464744, label:'Turn right'},
+      {lat:18.352266318463634, lng:121.650356714548, label:'Bear a little left'}
+    ],
     aliases:['gymplex','gym','gymnasium','sports','basketball'] },
   gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352329598700887, lng:121.6505757211261,
     steps:['Start at the main entrance','Turn left at the first intersection','Turn left again at the second intersection','Gatchalian Building is ahead – You have arrived to your destination'],
@@ -349,8 +358,12 @@ const BUILDINGS = {
       {lat:18.351563427984562, lng:121.65028840494261, label:'Bear a little left'}
     ],
     aliases:['avr','audio','visual','presentation','media'] },
-  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.352569667318097, lng:121.64997179523256,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road corner','Continue north toward the canteen','Canteen is on your left'],
+  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'265m', time:'~3 min', lat:18.35253551058823, lng:121.64998765796611,
+    steps:['Start at the main entrance','Walk straight for 191m and turn right','Walk straight for 57m, then bear a little left','Walk for 17m and the Canteen is ahead'],
+    waypoints:[
+      {lat:18.351871773158724, lng:121.64989222592551, label:'Turn right'},
+      {lat:18.35237485224993, lng:121.64999384514299, label:'Bear a little left'}
+    ],
     aliases:['canteen','food','eat','dining','court','lunch','meal'] },
   cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'287m', time:'~4 min', lat:18.352166160870844, lng:121.6490121022558,
     steps:['Start at the main entrance','Walk straight for 287m and CIT Building is ahead'],
