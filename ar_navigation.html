@@ -356,27 +356,60 @@ const BUILDINGS = {
     aliases:['cbea','business','accountancy','accounting','commerce'] },
   infra:       { name:'Infrastructure Office', icon:'🏗️', loc:'Far west campus – Pond Pavilion area', dist:'522m', time:'~7 min', lat:18.35264337189176, lng:121.64714727045033,
     steps:['Start at the main entrance','Walk straight for 455m and turn left','Walk straight for 33m and turn right','Walk for 34m and the Infrastructure Office is ahead'],
+    waypoints:[
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn left'},
+      {lat:18.35258222861205, lng:121.64748012504195, label:'Turn right'}
+    ],
     aliases:['infra','infrastructure','engineering','pond','pavilion'] },
   dnst:        { name:'DNST Building', icon:'⛰️', loc:'Hilltop campus', dist:'589m', time:'~8 min', lat:18.353480696371406, lng:121.64774568310278,
     steps:['Start at the main entrance','Walk straight for 455m and turn left','Walk straight for 74m, then bear a little left','Walk for 60m and DNST Building is ahead'],
+    waypoints:[
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn left'},
+      {lat:18.35295029908013, lng:121.64751226814704, label:'Bear a little left'}
+    ],
     aliases:['dnst','hilltop','mountain'] },
   oldadmin:    { name:'Old Admin Building', icon:'🏚️', loc:'West campus', dist:'490m', time:'~6 min', lat:18.35223673608025, lng:121.64742101450098,
     steps:['Start at the main entrance','Walk straight for 455m, then bear a little right','Walk for 35m and the Old Admin Building is ahead'],
+    waypoints:[
+      {lat:18.35223673608025, lng:121.64742101450098, label:'Bear a little right'}
+    ],
     aliases:['oldadmin','old','administration'] },
   hatchery:    { name:'Hatchery', icon:'🐟', loc:'South-west campus – Fish Hatchery', dist:'618m', time:'~8 min', lat:18.35137294211255, lng:121.64664869451029,
     steps:['Start at the main entrance','Walk straight for 460m and turn left','Walk straight for 104m and turn right','Walk for 54m and the Hatchery is ahead'],
+    waypoints:[
+      {lat:18.35223664785317, lng:121.64737933717946, label:'Turn left'},
+      {lat:18.351317645893104, lng:121.64716280870135, label:'Turn right'}
+    ],
     aliases:['hatchery','fish','aquaculture','pond'] },
   icrm:        { name:'ICRM Building', icon:'🌊', loc:'South campus – Institute of Coastal Resource Mgmt', dist:'479m', time:'~6 min', lat:18.350865258912254, lng:121.64821087462468,
     steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 135m and turn left','Walk for 25m and the ICRM Building is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.351089587757734, lng:121.64823818399485, label:'Turn left'}
+    ],
     aliases:['icrm','coastal','marine','ocean','resource'] },
   ceo_cottage: { name:"CEO's Cottage", icon:'🏠', loc:'Central campus – near Administration', dist:'424m', time:'~5 min', lat:18.35063356688629, lng:121.64877553002664,
     steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 65m and turn left','Walk for 40m and the CEO\'s Cottage is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.350975365868003, lng:121.64888147199309, label:'Turn left'}
+    ],
     aliases:['ceo','cottage','president'] },
   villa1:      { name:'Executive Villa 1', icon:'🏡', loc:'Central campus', dist:'400m', time:'~5 min', lat:18.35084035094204, lng:121.64882696934423,
     steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 65m and turn left','Walk for 16m and Executive Villa 1 is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.350975365868003, lng:121.64888147199309, label:'Turn left'}
+    ],
     aliases:['villa','executive'] },
   dorm:        { name:"Lecturer's Dormitory", icon:'🛏️', loc:'South campus – Faculty Dormitory', dist:'341m', time:'~4 min', lat:18.35064877426767, lng:121.6495550296666,
     steps:['Start at the main entrance','Walk straight for 206m and turn left','Walk for 135m and the Lecturer\'s Dormitory is ahead'],
+    waypoints:[
+      {lat:18.351837422912563, lng:121.64975081332878, label:'Turn left'}
+    ],
     aliases:['dorm','dormitory','faculty','housing','lodging'] }
 };
 
@@ -596,11 +629,49 @@ function updateArrowRotation() {
   arrowRotation = (diff * Math.PI) / 180;
 }
 
+// Ordered navigation points for a building: every GPS turn waypoint, then the
+// destination itself. Step i (i>=1) is reached when you arrive at points[i-1].
+function routePoints(b) {
+  const pts = (b.waypoints || []).map(w => ({ lat: w.lat, lng: w.lng }));
+  pts.push({ lat: b.lat, lng: b.lng });
+  return pts;
+}
+
+// GPS target the arrow should aim at for the current step: the next UNREACHED
+// route point, so the arrow guides you along the road instead of straight at
+// the building across fields/buildings.
+function currentStepTarget(b, points) {
+  const pts = points || routePoints(b);
+  const i = Math.min(stepIdx, pts.length - 1);
+  return pts[i];
+}
+
+// Remaining road distance to the destination measured along the waypoint path:
+// straight-line distance to the current target + every following segment.
+function remainingRouteMeters(b, points) {
+  const pts = points || routePoints(b);
+  if (pts.length === 0) return haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+  const i = Math.min(stepIdx, pts.length - 1);
+  let total = haversine(gpsPos.lat, gpsPos.lng, pts[i].lat, pts[i].lng);
+  for (let k = i; k < pts.length - 1; k++) {
+    total += haversine(pts[k].lat, pts[k].lng, pts[k + 1].lat, pts[k + 1].lng);
+  }
+  return total;
+}
+
 function updateDistanceAndBearing() {
   if (!gpsPos || !dest) return;
   const b = BUILDINGS[dest];
-  distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-  bearing = calcBearing(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+
+  // Targets are the GPS turn waypoints (if any) plus the destination.
+  const points = (b.waypoints && b.waypoints.length > 0)
+    ? routePoints(b)
+    : [{ lat: b.lat, lng: b.lng }];
+
+  distToDest = remainingRouteMeters(b, points);
+  // Arrow points at the next waypoint so the user follows the actual route.
+  const tgt = currentStepTarget(b, points);
+  bearing = calcBearing(gpsPos.lat, gpsPos.lng, tgt.lat, tgt.lng);
 
   // Update stats
   document.getElementById('s-dist').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
@@ -611,8 +682,8 @@ function updateDistanceAndBearing() {
   // Arrow rotation: difference between compass heading and bearing to destination
   updateArrowRotation();
 
-  // Auto-advance steps based on distance thresholds
-  autoAdvanceByDistance();
+  // Auto-advance steps based on reaching each waypoint
+  autoAdvanceByDistance(points);
 
   // Arrival check
   if (distToDest < 20 && !arrived) {
@@ -620,23 +691,26 @@ function updateDistanceAndBearing() {
   }
 }
 
-function autoAdvanceByDistance() {
+function autoAdvanceByDistance(points) {
   if (!dest || arrived || !gpsPos) return;
   const b = BUILDINGS[dest];
   const totalSteps = b.steps.length;
   if (totalSteps <= 1) return;
 
-  // If this building has GPS waypoints, advance based on remaining distance thresholds
-  if (b.waypoints && b.waypoints.length > 0) {
-    // thresholds[i] = trigger step i+1 when distToDest drops below this value (metres)
-    const thresholds = [150, 52, 22];
+  // Waypoint-driven auto-advance: when you are close to (or have walked past)
+  // the current target, move to the next step.
+  if (points && points.length > 1) {
+    const i = Math.min(stepIdx, points.length - 1);
+    const dNow = haversine(gpsPos.lat, gpsPos.lng, points[i].lat, points[i].lng);
     let newStep = stepIdx;
-    for (let i = 0; i < Math.min(b.waypoints.length, thresholds.length); i++) {
-      if (distToDest < thresholds[i]) {
-        newStep = Math.max(newStep, i + 1);
+    if (stepIdx < totalSteps - 1) {
+      const nextIdx = Math.min(i + 1, points.length - 1);
+      const dNext = haversine(gpsPos.lat, gpsPos.lng, points[nextIdx].lat, points[nextIdx].lng);
+      // Within 12m of the turn, or already closer to the next point -> walk past it.
+      if (dNow < 12 || dNext < dNow) {
+        newStep = Math.min(stepIdx + 1, totalSteps - 1);
       }
     }
-    newStep = Math.min(newStep, totalSteps - 1);
 
     if (newStep > stepIdx) {
       stepIdx = newStep;
@@ -646,7 +720,7 @@ function autoAdvanceByDistance() {
     return;
   }
 
-  // Fallback: percentage-based auto-advance for buildings without waypoints
+  // Fallback (no waypoints): percentage-based auto-advance.
   const total = startDist || parseFloat(b.dist) || 200;
   if (total <= 0) return;
   const remainingFraction = distToDest / total;
@@ -938,10 +1012,18 @@ function refreshUI() {
   if (currentEl) currentEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
 
   if (!gpsPos) {
-    // Without GPS, estimate distance from step position
-    const remaining = b.steps.length - stepIdx;
-    document.getElementById('s-dist').textContent = Math.round(remaining * 50) + 'm';
-    document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining * 0.7)) + ' min';
+    // Without GPS, estimate remaining distance from the current step onward.
+    let remaining = 0;
+    for (let i = stepIdx; i < b.steps.length; i++) {
+      const m = /(\d+)m/i.exec(b.steps[i]);
+      if (m) remaining += parseInt(m[1], 10);
+    }
+    // Step 0 ("Start at the main entrance") has no length; fall back on declared dist.
+    if (remaining === 0) {
+      remaining = Math.max(1, b.steps.length - stepIdx) * 50;
+    }
+    document.getElementById('s-dist').textContent = Math.round(remaining) + 'm';
+    document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining / (userSpeed * 60))) + ' min';
   }
 }
 
