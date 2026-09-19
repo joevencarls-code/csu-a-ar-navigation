@@ -207,6 +207,15 @@
     <button onclick="beginFromGate()" style="background:var(--blue);color:#fff;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Start Navigation</button>
   </div>
 
+  <!-- Location permission gate (search entry — asks explicitly and auto-opens GPS) -->
+  <div class="overlay overlay-dark" id="gps-gate" style="display:none">
+    <div style="font-size:48px;margin-bottom:14px">📍</div>
+    <h2 style="color:#fff;font-size:19px;margin-bottom:8px">Allow Location?</h2>
+    <p style="color:#94a3b8;font-size:13px;line-height:1.55;text-align:center;max-width:290px;margin-bottom:20px">Your location is used to sort buildings by distance and to guide you gate-by-gate to your destination.</p>
+    <button onclick="allowGps()" style="background:var(--blue);color:#fff;border:none;padding:13px 34px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Allow Location</button>
+    <button onclick="dismissGpsGate()" style="background:transparent;border:none;color:rgba(255,255,255,.55);font-size:12px;cursor:pointer;margin-top:14px;text-decoration:underline">Not now</button>
+  </div>
+
   <!-- Camera (top half — AR real-time) -->
   <div class="ar-half">
     <video id="camera-feed" autoplay playsinline muted></video>
@@ -10630,24 +10639,48 @@ window.addEventListener('load', async () => {
     // iOS Safari blocks camera + GPS unless triggered by a user tap.
     const gate = document.getElementById('start-gate');
     gate.style.display = 'flex';
+    // If location was allowed on a previous visit, open it automatically.
+    tryAutoGPS(false);
   } else {
     // Entry without a direct link: show the destination search first.
-    // Location permission is requested on the user's first tap (a real
-    // touch/click gesture) so the iOS/Android permission dialog appears.
-    let gpsStarted = false;
-    const startGpsOnGesture = () => {
-      if (gpsStarted) return;
-      gpsStarted = true;
-      document.removeEventListener('touchend', startGpsOnGesture, true);
-      document.removeEventListener('click', startGpsOnGesture, true);
-      startGPS();
-    };
-    document.addEventListener('touchend', startGpsOnGesture, true);
-    document.addEventListener('click', startGpsOnGesture, true);
+    // If permission is already granted we start location automatically;
+    // otherwise an explicit "Allow Location" gate is shown for the user tap.
+    tryAutoGPS(true);
     hideLoading();
     openSearch();
   }
 });
+
+function tryAutoGPS(showPrompt) {
+  if (!navigator.geolocation) return;
+  if (typeof navigator.permissions !== 'undefined' && typeof navigator.permissions.query === 'function') {
+    navigator.permissions.query({ name: 'geolocation' }).then(s => {
+      if (s.state === 'granted') {
+        startGPS();                 // already allowed -> open the location automatically
+      } else if (s.state === 'prompt' && showPrompt) {
+        showGpsGate();              // needs a tap -> ask for permission
+      }
+    }).catch(() => {});
+  }
+}
+
+function showGpsGate() {
+  document.getElementById('gps-gate').style.display = 'flex';
+}
+
+function dismissGpsGate() {
+  document.getElementById('gps-gate').style.display = 'none';
+}
+
+function allowGps() {
+  dismissGpsGate();
+  startGPS(); // called inside the button's tap so the permission dialog appears
+}
+
+function updateGpsDisplay() {
+  const el = document.getElementById('s-gps');
+  if (el) el.textContent = gpsPos ? (gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : 'GPS') : 'Locating…';
+}
 
 function hideLoading() {
   document.getElementById('loading').classList.add('hidden');
@@ -10758,6 +10791,12 @@ function startGPS() {
   gpsAsked = true;
   gpsRetries = 0;
 
+  // Show that we are trying to open the location automatically.
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show');
+  dot.classList.remove('on');
+  updateGpsDisplay();
+
   // One-shot request first: this triggers the location permission dialog while
   // we are still inside the user gesture that called startGPS() (iOS will not
   // show it otherwise). Once the user grants access and we have the first fix
@@ -10800,6 +10839,10 @@ function onGpsCoords(c) {
 
   const dot = document.getElementById('gps-dot');
   dot.classList.add('show', 'on');
+
+  // A fix arrived — hide the permission gate and show the live accuracy.
+  dismissGpsGate();
+  updateGpsDisplay();
 
   if (!startDist && dest) {
     startDist = haversine(newLat, newLng, BUILDINGS[dest].lat, BUILDINGS[dest].lng);
