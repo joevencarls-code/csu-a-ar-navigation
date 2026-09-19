@@ -10600,6 +10600,8 @@ let gpsRetries = 0;       // consecutive GPS failures before retry
 let gpsAsked = false;     // true once location permission has been requested
 const GPS_MAX_RETRIES = 6;
 let orientationListener = null;
+let compassInstalled = false;  // true once the orientation listener is attached
+let mapHeadingSmooth = -1;     // smoothed map rotation (degrees, destination-up)
 let arrived = false;
 
 // Voice guide (text-to-speech step announcements)
@@ -10661,6 +10663,10 @@ async function beginFromGate() {
   //    permission dialog if geolocation is requested after the async camera
   //    setup, so the GPS prompt must happen before the await below.
   startGPS();
+
+  // 1b) Ask for the compass (device orientation) in the same tap so the map
+  //    and navigation arrow can rotate on iOS too.
+  requestCompassPermission();
 
   // 2) Camera permission (the dialog queues behind the location one on iOS).
   await initCamera();
@@ -11000,9 +11006,12 @@ function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
 }
 
 function startCompass() {
-  let hasPermission = false;
+  requestCompassPermission();
+}
 
-  // iOS 13+ requires permission
+// Ask for device-orientation permission and install the listener. On iOS this
+// must run inside a user gesture (the start tap) or the prompt never appears.
+function requestCompassPermission() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().then(state => {
       if (state === 'granted') installOrientationListener();
@@ -11013,6 +11022,8 @@ function startCompass() {
 }
 
 function installOrientationListener() {
+  if (compassInstalled) return; // already listening
+  compassInstalled = true;
   orientationListener = e => {
     let h = 0;
     if (e.webkitCompassHeading !== undefined) {
@@ -11734,8 +11745,23 @@ function renderMinimap(ts) {
   const userX = w / 2;
   const userY = h - 26;
 
-  // Heading-up rotation (matches the `place` maths used for the route lines)
-  const hRad = (heading * Math.PI) / 180;
+  // Map rotation: rotate the map so the current navigation target (the next
+  // gate / turn waypoint, and finally the destination itself) always points UP
+  // toward the top of the screen — the gate you are walking to always "faces
+  // you". Smoothed so it turns smoothly as you round corners. When there is no
+  // destination (idle campus map) we fall back to the compass heading so the
+  // map still turns with the phone.
+  let mapHeadingDeg = 0;
+  if (dest && gpsPos) {
+    const tgt = currentStepTarget(b, routePoints(b));
+    if (tgt) mapHeadingDeg = calcBearing(gpsPos.lat, gpsPos.lng, tgt.lat, tgt.lng);
+  } else if (rawHeading >= 0) {
+    mapHeadingDeg = heading;
+  }
+  if (mapHeadingSmooth < 0) mapHeadingSmooth = mapHeadingDeg;
+  const dAng = ((((mapHeadingDeg - mapHeadingSmooth) % 360) + 540) % 360) - 180;
+  mapHeadingSmooth += dAng * 0.18;
+  const hRad = (mapHeadingSmooth * Math.PI) / 180;
 
   // Background: the real campus map image, rotated and centred on the user.
   if (mapImg && mapImg.complete && mapImg.naturalWidth > 0) {
