@@ -10642,15 +10642,21 @@ window.addEventListener('load', async () => {
 });
 
 function tryAutoGPS(showPrompt) {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) return incorporated;
   if (typeof navigator.permissions !== 'undefined' && typeof navigator.permissions.query === 'function') {
     navigator.permissions.query({ name: 'geolocation' }).then(s => {
       if (s.state === 'granted') {
-        startGPS();                 // already allowed -> open the location automatically
-      } else if (s.state === 'prompt' && showPrompt) {
-        showGpsGate();              // needs a tap -> ask for permission
+        startGPS();               // already allowed -> open the location automatically
+      } else if (showPrompt && s.state === 'prompt') {
+        showGpsGate();            // needs a tap -> ask for permission
+      } else if (showPrompt && (s.state === 'denied' || s.state === 'unknown')) {
+        startGPS();               // previously denied -> still try to open directly
+        showGpsGate();            // and show the gate so the user can re-tap Allow
       }
-    }).catch(() => {});
+    }).catch(() => { if (showPrompt) showGpsGate(); });
+  } else if (showPrompt) {
+    // No Permissions API (older WebView / kiosk browser) -> ask in-app.
+    showGpsGate();
   }
 }
 
