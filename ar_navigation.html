@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#002855">
 <title>CSU-A AR Navigation</title>
 <style>
-  :root{--blue:#003d82;--blue-light:#1a5faf;--blue-dark:#002855;--green:#059669;--gold:#d97706;--red:#dc2626;--radius:14px}
+  :root{--blue:#003d82;--blue-light:#1a5faf;--blue-dark:#002855;--green:#059669;--gold:#ffd700;--gold-light:#ffe44d;--red:#dc2626;--radius:14px}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden;position:fixed;top:0;left:0;width:100%;background:#000}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
@@ -24,34 +24,34 @@
   /* ── Loading ── */
   .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
   .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
-  .overlay-dark{background:#0f172a;color:#fff}
-  .overlay-scan{background:rgba(0,0,0,.75);z-index:30}
-  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.12);border-top-color:var(--blue-light);border-radius:50%;animation:spin .7s linear infinite}
+  .overlay-dark{background:linear-gradient(180deg,var(--blue),var(--blue-dark));color:#fff}
+  .overlay-scan{background:rgba(0,23,51,.82);z-index:30}
+  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ── Top Bar ── */
-  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(0,0,0,.72) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:none}
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(0,40,85,.82) 0%,rgba(0,40,85,0) 100%);display:flex;align-items:center;gap:10px;pointer-events:none}
   .topbar>*{pointer-events:auto}
-  .topbar-title{flex:1;color:#fff;font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-title{flex:1;color:#fff;font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .topbar-badge{background:var(--blue);color:#fff;font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;transition:background .3s}
-  .topbar-badge.active{background:var(--green)}
+  .topbar-badge.active{background:var(--gold);color:var(--blue-dark)}
   .topbar-btn{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);flex-shrink:0;cursor:pointer}
 
   /* ── Compass (over the camera, shows north / bearing) ── */
-  .compass{position:absolute;top:calc(env(safe-area-inset-top,0px) + 74px);right:14px;z-index:21;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.18);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  .compass{position:absolute;top:calc(env(safe-area-inset-top,0px) + 74px);right:14px;z-index:21;width:52px;height:52px;border-radius:50%;background:rgba(0,40,85,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;border:2px solid rgba(255,215,0,.35);box-shadow:0 4px 16px rgba(0,0,0,.4)}
   .compass.show{display:flex}
   .compass-needle{width:28px;height:28px;transition:transform .15s linear}
 
   /* ── GPS indicator ── */
-  .gps-dot{position:absolute;top:60px;left:14px;z-index:20;width:10px;height:10px;border-radius:50%;background:#6b7280;display:none}
+  .gps-dot{position:absolute;top:60px;left:14px;z-index:20;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.4);display:none}
   .gps-dot.show{display:block}
-  .gps-dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+  .gps-dot.on{background:var(--gold);box-shadow:0 0 8px var(--gold)}
 
   /* ── Scanner ── */
   .scan-frame{width:250px;height:250px;border:2.5px solid rgba(255,255,255,.85);border-radius:18px;position:relative;margin-bottom:20px}
-  .scan-frame::before{content:'';position:absolute;inset:-3px;border-radius:20px;border:3px solid transparent;border-top-color:var(--blue-light);animation:rotateBorder 1.4s linear infinite}
+  .scan-frame::before{content:'';position:absolute;inset:-3px;border-radius:20px;border:3px solid transparent;border-top-color:var(--gold);animation:rotateBorder 1.4s linear infinite}
   @keyframes rotateBorder{to{transform:rotate(360deg)}}
-  .scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--blue-light),transparent);animation:scanY 2.2s ease-in-out infinite}
+  .scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanY 2.2s ease-in-out infinite}
   @keyframes scanY{0%,100%{top:8px}50%{top:calc(100% - 8px)}}
   .scan-corners{position:absolute;inset:-1px}
   .scan-corners::before,.scan-corners::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
@@ -67,34 +67,34 @@
   .scan-fallback{margin-top:12px}
   .scan-fallback input{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;width:220px;text-align:center;outline:none}
   .scan-fallback input::placeholder{color:rgba(255,255,255,.4)}
-  .scan-fallback button{margin-top:8px;background:var(--blue);border:none;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;width:220px;cursor:pointer}
+  .scan-fallback button{margin-top:8px;background:linear-gradient(135deg,var(--blue),var(--blue-dark));border:none;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;width:220px;cursor:pointer}
 
   /* ── Top Nav (steps at top) ── */
   .nav-top{position:absolute;top:0;left:0;right:0;z-index:22;padding-top:max(52px,calc(env(safe-area-inset-top) + 52px));transform:translateY(-130%);transition:transform .5s cubic-bezier(.16,1,.3,1)}
   .nav-top.show{transform:translateY(0)}
-  .nav-banner{display:flex;align-items:center;gap:12px;background:rgba(15,23,42,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.12);border-radius:18px;margin:0 12px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+  .nav-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(0,61,130,.92),rgba(0,40,85,.94));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,215,0,.28);border-radius:18px;margin:0 12px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,30,70,.45)}
   .nav-banner-main{flex:1;min-width:0}
   .panel-name{font-size:15px;font-weight:800;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .panel-sub{font-size:11px;color:#94a3b8;margin:2px 0 4px;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .panel-sub{font-size:11px;color:rgba(255,255,255,.72);margin:2px 0 4px;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .panel-sub .icon{font-size:13px}
-  .btn-scan-mini{width:38px;height:38px;border-radius:12px;border:none;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;box-shadow:0 4px 12px rgba(0,61,130,.4)}
-  .btn-scan-mini.ghost{background:rgba(255,255,255,.14)}
+  .btn-scan-mini{width:38px;height:38px;border-radius:12px;border:none;border:1.5px solid rgba(255,215,0,.35);background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;box-shadow:0 4px 12px rgba(0,61,130,.4)}
+  .btn-scan-mini.ghost{background:rgba(255,255,255,.14);border:none}
   .btn-scan-mini.off{background:rgba(255,255,255,.1);opacity:.55}
 
   /* Direction card */
-  .dir-card{display:flex;align-items:center;gap:12px;background:#f0f4ff;border-radius:var(--radius);padding:12px;margin-bottom:12px}
-  .dir-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dir-card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:var(--radius);padding:12px;margin-bottom:12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .dir-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,.2)}
   .dir-icon svg{width:30px;height:30px}
-  .dir-label{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .dir-label{font-size:10px;color:rgba(255,255,255,.6);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
   .dir-text{font-size:14px;font-weight:800;color:#fff;line-height:1.3}
 
   /* Stats row */
   .stats-row{display:flex;gap:8px;margin:10px 12px 0}
-  .stat{flex:1;background:rgba(15,23,42,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:7px 6px;text-align:center}
-  .stat-val{font-size:14px;font-weight:800;color:#93c5fd}
-  .stat-lbl{font-size:8px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
+  .stat{flex:1;background:rgba(0,40,85,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,215,0,.22);border-radius:12px;padding:7px 6px;text-align:center}
+  .stat-val{font-size:14px;font-weight:800;color:var(--gold)}
+  .stat-lbl{font-size:8px;color:rgba(255,255,255,.62);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
   .stat.big .stat-val{font-size:18px;color:#fff}
-  .stat.big .stat-lbl{color:#60a5fa}
+  .stat.big .stat-lbl{color:var(--gold)}
 
   /* Buttons */
   .btn-row{display:flex;gap:8px}
@@ -102,23 +102,23 @@
   .btn:active{transform:scale(.97)}
   .btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;box-shadow:0 4px 14px rgba(0,61,130,.3)}
   .btn-success{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 14px rgba(5,150,105,.3)}
-  .btn-outline{background:#f0f4ff;color:var(--blue)}
+  .btn-outline{background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.25)}
 
   /* ── No Camera ── */
-  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#0f172a,#1e293b);color:#fff;padding:32px;text-align:center}
+  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#003d82,#002855);color:#fff;padding:32px;text-align:center}
   .no-cam-icon{font-size:56px;margin-bottom:16px}
   .no-cam h2{font-size:20px;margin-bottom:6px}
-  .no-cam p{font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:20px;max-width:300px}
-  .no-cam button{background:var(--blue);color:#fff;border:none;padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer}
+  .no-cam p{font-size:13px;color:rgba(255,255,255,.7);line-height:1.5;margin-bottom:20px;max-width:300px}
+  .no-cam button{background:linear-gradient(135deg,var(--blue),var(--blue-dark));border:1.5px solid rgba(255,215,0,.35);color:#fff;padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer}
 
   /* ── Arrival ── */
-  .arrival{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:all .4s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .arrival{position:absolute;inset:0;z-index:40;background:linear-gradient(180deg,rgba(0,40,85,.88),rgba(0,26,58,.9));display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:all .4s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .arrival.show{opacity:1;visibility:visible}
-  .arrival-circle{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin-bottom:18px;animation:popIn .5s cubic-bezier(.16,1,.3,1)}
+  .arrival-circle{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--gold-light),var(--gold));display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 0 30px rgba(255,215,0,.35);animation:popIn .5s cubic-bezier(.16,1,.3,1)}
   @keyframes popIn{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
   .arrival h2{color:#fff;font-size:22px;font-weight:800;margin-bottom:4px;animation:fbFadeUp .4s ease}
-  .arrival p{color:#94a3b8;font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
-  .arrival > button{background:#fff;color:#0f172a;border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
+  .arrival p{color:rgba(255,255,255,.75);font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
+  .arrival > button{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--blue-dark);border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)}
 
   /* ── Feedback (interactive) ── */
   .fb-area{margin-top:8px;text-align:center}
@@ -136,14 +136,14 @@
   .fb-msg-wrap{position:relative;width:86%;max-width:280px;margin:0 auto 12px}
   .fb-msg{width:100%;padding:10px 12px 22px;border:1.5px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(255,255,255,.08);color:#fff;font-size:13px;resize:none;font-family:inherit;outline:none;transition:border-color .2s,background .2s;display:block}
   .fb-msg::placeholder{color:rgba(255,255,255,.4)}
-  .fb-msg:focus{border-color:var(--blue-light);background:rgba(255,255,255,.12)}
+  .fb-msg:focus{border-color:var(--gold);background:rgba(255,255,255,.14)}
   .fb-count{position:absolute;right:10px;bottom:6px;font-size:10px;color:rgba(255,255,255,.35);font-weight:600}
   .fb-actions{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px}
   .fb-submit{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;padding:11px 20px;border-radius:12px;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(0,61,130,.35);transition:transform .12s,opacity .2s,background .3s,box-shadow .2s}
   .fb-submit:active{transform:scale(.96)}
   .fb-submit:disabled{opacity:.5;cursor:default;box-shadow:none}
   .fb-submit .fb-check{display:none}
-  .fb-submit.success{background:linear-gradient(135deg,#10b981,#047857);box-shadow:0 4px 14px rgba(16,185,129,.4)}
+  .fb-submit.success{background:linear-gradient(135deg,var(--gold),#eab308);box-shadow:0 4px 14px rgba(255,215,0,.4)}
   .fb-submit.success .fb-check{display:block}
   .fb-submit.success .fb-submit-txt{display:none}
   .fb-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none}
@@ -151,36 +151,36 @@
   .fb-submit.loading .fb-submit-txt{display:none}
   .fb-skip{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer;text-decoration:underline;padding:10px 8px;transition:color .2s}
   .fb-skip:hover{color:rgba(255,255,255,.8)}
-  .fb-thanks{display:flex;flex-direction:column;align-items:center;color:#22c55e;font-size:15px;font-weight:700;margin-top:8px;animation:fbThanksIn .5s cubic-bezier(.16,1,.3,1)}
+  .fb-thanks{display:flex;flex-direction:column;align-items:center;color:var(--gold);font-size:15px;font-weight:700;margin-top:8px;animation:fbThanksIn .5s cubic-bezier(.16,1,.3,1)}
   .fb-thanks-inner{display:flex;align-items:center;gap:8px}
   .fb-thanks-sub{color:rgba(255,255,255,.5);font-size:11px;font-weight:500;margin-top:6px}
   @keyframes fbThanksIn{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
 
   /* ── Toast ── */
-  .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,0,0,.85);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
+  .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,40,85,.9);border:1px solid rgba(255,215,0,.4);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
   /* ── Search Overlay ── */
-  .search-overlay{position:absolute;inset:0;z-index:45;background:#0f172a;display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.16,1,.3,1),opacity .3s}
+  .search-overlay{position:absolute;inset:0;z-index:45;background:linear-gradient(180deg,#003d82,#002855);display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.16,1,.3,1),opacity .3s}
   .search-overlay.hidden{transform:translateY(100%);opacity:0;pointer-events:none}
-  .search-header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.08)}
+  .search-header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.12)}
   .search-header h2{color:#fff;font-size:17px;font-weight:800;flex:1}
-  .search-close{width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .search-close{width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
   .search-input-wrap{padding:12px 16px;position:relative}
-  .search-input-wrap svg{position:absolute;left:28px;top:50%;transform:translateY(-50%);color:#64748b;pointer-events:none}
-  .search-input{width:100%;padding:13px 14px 13px 44px;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);border-radius:14px;color:#fff;font-size:15px;outline:none;transition:border-color .2s}
-  .search-input:focus{border-color:var(--blue-light)}
-  .search-input::placeholder{color:#64748b}
+  .search-input-wrap svg{position:absolute;left:28px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.55);pointer-events:none}
+  .search-input{width:100%;padding:13px 14px 13px 44px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.16);border-radius:14px;color:#fff;font-size:15px;outline:none;transition:border-color .2s}
+  .search-input:focus{border-color:var(--gold);background:rgba(255,255,255,.16)}
+  .search-input::placeholder{color:rgba(255,255,255,.5)}
   .search-results{flex:1;overflow-y:auto;padding:4px 16px 100px;-webkit-overflow-scrolling:touch}
   .search-result{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:14px;cursor:pointer;transition:background .15s}
-  .search-result:active{background:rgba(255,255,255,.08)}
-  .search-result-icon{width:42px;height:42px;border-radius:12px;background:rgba(26,95,175,.15);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .search-result:active{background:rgba(255,255,255,.12)}
+  .search-result-icon{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
   .search-result-info{flex:1;min-width:0}
   .search-result-name{color:#fff;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .search-result-loc{color:#64748b;font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .search-result-dist{color:var(--blue-light);font-size:12px;font-weight:700;flex-shrink:0}
-  .search-section-label{color:#475569;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:16px 12px 8px}
-  .search-empty{text-align:center;padding:60px 20px;color:#475569;font-size:14px}
+  .search-result-loc{color:rgba(255,255,255,.58);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .search-result-dist{color:var(--gold);font-size:12px;font-weight:700;flex-shrink:0}
+  .search-section-label{color:rgba(255,255,255,.5);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:16px 12px 8px}
+  .search-empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.5);font-size:14px}
   .search-empty-icon{font-size:40px;margin-bottom:12px}
 
 
@@ -192,23 +192,23 @@
   <!-- Loading -->
   <div class="overlay overlay-dark" id="loading">
     <div class="spinner"></div>
-    <p style="color:#94a3b8;font-size:13px;margin-top:14px">Starting camera...</p>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;margin-top:14px">Starting camera...</p>
   </div>
 
   <!-- Start gate (direct dest links need a user tap for iOS camera + GPS permission) -->
   <div class="overlay overlay-dark" id="start-gate" style="display:none">
     <div style="font-size:52px;margin-bottom:16px">🧭</div>
     <h2 style="color:#fff;font-size:20px;margin-bottom:8px">Start AR Navigation</h2>
-    <p style="color:#94a3b8;font-size:13px;line-height:1.5;text-align:center;max-width:280px;margin-bottom:20px">Tap below to allow camera and location access so the compass can guide you to your destination.</p>
-    <button onclick="beginFromGate()" style="background:var(--blue);color:#fff;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Start Navigation</button>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.5;text-align:center;max-width:280px;margin-bottom:20px">Tap below to allow camera and location access so the compass can guide you to your destination.</p>
+    <button onclick="beginFromGate()" style="background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Start Navigation</button>
   </div>
 
   <!-- Location permission gate (search entry — asks explicitly and auto-opens GPS) -->
   <div class="overlay overlay-dark" id="gps-gate" style="display:none">
     <div style="font-size:48px;margin-bottom:14px">📍</div>
     <h2 style="color:#fff;font-size:19px;margin-bottom:8px">Allow Location?</h2>
-    <p style="color:#94a3b8;font-size:13px;line-height:1.55;text-align:center;max-width:290px;margin-bottom:20px">Your location is used to sort buildings by distance and to guide you directly to your destination.</p>
-    <button onclick="allowGps()" style="background:var(--blue);color:#fff;border:none;padding:13px 34px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Allow Location</button>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.55;text-align:center;max-width:290px;margin-bottom:20px">Your location is used to sort buildings by distance and to guide you directly to your destination.</p>
+    <button onclick="allowGps()" style="background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:13px 34px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Allow Location</button>
     <button onclick="dismissGpsGate()" style="background:transparent;border:none;color:rgba(255,255,255,.55);font-size:12px;cursor:pointer;margin-top:14px;text-decoration:underline">Not now</button>
   </div>
 
@@ -223,9 +223,9 @@
     <div class="no-cam-icon">📷</div>
     <h2>Camera Required</h2>
     <p>Allow camera access to use AR Navigation. Point your camera at QR codes placed at each building.</p>
-    <p style="font-size:12px;color:#64748b;margin-bottom:16px" id="no-cam-reason"></p>
+    <p style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:16px" id="no-cam-reason"></p>
     <button onclick="initCamera()" style="margin-bottom:10px">Try Again</button>
-    <button onclick="openInBrowser()" style="background:transparent;border:1.5px solid rgba(255,255,255,.3);color:#94a3b8;padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Open in Chrome / Safari</button>
+    <button onclick="openInBrowser()" style="background:transparent;border:1.5px solid rgba(255,255,255,.3);color:rgba(255,255,255,.85);padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Open in Chrome / Safari</button>
   </div>
 
   <!-- GPS dot -->
@@ -235,7 +235,7 @@
   <div class="compass" id="compass">
     <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle">
       <polygon points="14,2 18,12 14,10 10,12" fill="#ef4444"/>
-      <polygon points="14,26 10,16 14,18 18,16" fill="#94a3b8"/>
+      <polygon points="14,26 10,16 14,18 18,16" fill="#ffd700"/>
     </svg>
   </div>
 
@@ -298,7 +298,7 @@
   <!-- Arrival -->
   <div class="arrival" id="arrival">
     <div class="arrival-circle">
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#002855" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
     </div>
     <h2>You've Arrived!</h2>
     <p id="arrival-msg"></p>
@@ -11218,8 +11218,8 @@ function refreshUI() {
     right:    '<svg viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M11 19l7-7-7-7"/></svg>'
   };
 
-  const dirColors = { straight:'#dbeafe', left:'#dcfce7', right:'#fef3c7' };
-  const dirStrokes = { straight:'#003d82', left:'#059669', right:'#d97706' };
+  const dirColors = { straight:'#fff3b0', left:'#dbeafe', right:'#fde68a' };
+  const dirStrokes = { straight:'#003d82', left:'#1a5faf', right:'#b45309' };
   document.getElementById('dir-icon').style.background = dirColors[turn];
   document.getElementById('dir-icon').innerHTML = TURN_ICONS[turn].replace('STROKE', dirStrokes[turn]);
 
@@ -11337,7 +11337,7 @@ function drawNavigationArrow(x, y, angle) {
   const grad = arCtx.createLinearGradient(0, -52, 0, 44);
   grad.addColorStop(0, '#a5c8ff');
   grad.addColorStop(0.35, '#1a5faf');
-  grad.addColorStop(1, '#1d4ed8');
+  grad.addColorStop(1, '#003d82');
   arCtx.fillStyle = grad;
   arCtx.fill();
 
@@ -11413,10 +11413,15 @@ function drawARDistanceLabel(x, y) {
 
   // Background pill
   const tw = arCtx.measureText(dist).width + 24;
-  arCtx.fillStyle = 'rgba(0,0,0,0.55)';
+  arCtx.fillStyle = 'rgba(0,40,85,0.65)';
   arCtx.beginPath();
   arCtx.roundRect(x - tw/2, y - 14, tw, 28, 14);
   arCtx.fill();
+
+  // Gold border ring
+  arCtx.strokeStyle = 'rgba(255,215,0,0.55)';
+  arCtx.lineWidth = 1.5;
+  arCtx.stroke();
 
   // Text
   arCtx.fillStyle = '#fff';
