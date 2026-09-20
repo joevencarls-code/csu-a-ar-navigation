@@ -84,7 +84,8 @@
   .gate-hint{margin-top:16px;font-size:14px;line-height:1.5;color:var(--gold-soft)}
   .gate-hint b{color:var(--gold)}
   .gate-hint small{color:rgba(255,255,255,.6)}
-  .gate-skip{margin-top:12px;background:none;border:0;color:rgba(255,255,255,.65);font:500 15px var(--font-body);text-decoration:underline;min-height:44px;padding:0 8px} 
+  .gate-skip{margin-top:12px;background:none;border:0;color:rgba(255,255,255,.65);font:500 15px var(--font-body);text-decoration:underline;min-height:44px;padding:0 8px}
+ 
   /* ── Top bar ── */
   .topbar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:8px;padding:calc(var(--safe-t) + 10px) 12px 14px;background:linear-gradient(180deg,rgba(0,18,44,.6),rgba(0,18,44,0));pointer-events:none}
   .topbar>*{pointer-events:auto}
@@ -233,6 +234,25 @@
   .search-empty svg{width:44px;height:44px;color:#9fb0c8;margin-bottom:12px}
   .search-empty b{color:var(--ink)}
  
+ 
+  /* ── Launch splash: full logo animation, plays once, tap to skip ── */
+  .splash{position:absolute;inset:0;z-index:80;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;transition:opacity .5s,visibility .5s;cursor:pointer}
+  .splash.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .splash-stage{position:relative;width:min(64vw,300px);aspect-ratio:300/270}
+  .splash-stage svg{position:relative;width:100%;height:100%;display:block;overflow:visible}
+  .splash-halo{position:absolute;inset:-35%;background:radial-gradient(closest-side,rgba(58,134,255,.3),rgba(58,134,255,0));opacity:0;animation:spHalo 3s ease forwards}
+  .sp-line,.sp-glow-line{fill:none;stroke:url(#logoGrad);stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:1 1;stroke-dashoffset:1;animation:spDraw 3s forwards}
+  .sp-line{stroke-width:4.5}
+  .sp-glow-line{stroke-width:10;filter:url(#logoBlur)}
+  .sp-glow{opacity:0;animation:spGlow 3s forwards}
+  .sp-spark{fill:none;stroke:#fffbe0;stroke-width:5;stroke-linecap:round;stroke-linejoin:miter;stroke-dasharray:.09 .91;stroke-dashoffset:0;opacity:0;filter:url(#logoBloom);animation:spSpark 3s forwards}
+  .splash-word{margin-top:30px;font:700 26px/1 var(--font-display);letter-spacing:.4px;color:#fff;opacity:0;transform:translateY(8px);animation:spWord .7s 1.9s var(--ease) forwards}
+  @keyframes spDraw{0%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}45%,100%{stroke-dashoffset:0}}
+  @keyframes spGlow{0%,15%{opacity:0}45%{opacity:.9}75%,100%{opacity:.5}}
+  @keyframes spSpark{0%,42%{stroke-dashoffset:0;opacity:0}44%{opacity:1;animation-timing-function:cubic-bezier(.45,0,.55,1)}88%{stroke-dashoffset:-1;opacity:1}90%,100%{stroke-dashoffset:-1;opacity:0}}
+  @keyframes spHalo{0%,15%{opacity:0}55%,100%{opacity:1}}
+  @keyframes spWord{to{opacity:1;transform:none}}
+ 
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
     .boot-line{stroke-dashoffset:0}
@@ -249,6 +269,11 @@
       <stop offset=".58" stop-color="#ffd60a"/>
       <stop offset="1" stop-color="#ffb703"/>
     </linearGradient>
+    <filter id="logoBlur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="logoBloom" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
 </svg>
  
@@ -448,6 +473,19 @@
  
   <!-- Toast -->
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+ 
+  <!-- Launch splash (animated logo) -->
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-stage">
+      <span class="splash-halo"></span>
+      <svg viewBox="250 160 300 270">
+        <g class="sp-glow"><path class="sp-glow-line" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/></g>
+        <path class="sp-line" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+        <path class="sp-spark" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+      </svg>
+    </div>
+    <div class="splash-word">CSU-A AR Navigation</div>
+  </div>
 </div>
  
 <script>
@@ -618,6 +656,24 @@ let arCy = 0;             // vertical centre of the AR marker (sits between the 
 let arCyTarget = 0;
 let arFrame = 0;
 const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+ 
+/* ================================================================
+   LAUNCH SPLASH — plays once per browser tab, tap to skip
+   ================================================================ */
+(function initSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  let seen = false;
+  try { seen = sessionStorage.getItem('csua-splash') === '1'; } catch (e) {}
+  if (seen) { el.remove(); return; }
+  try { sessionStorage.setItem('csua-splash', '1'); } catch (e) {}
+  const dismiss = () => {
+    el.classList.add('hidden');
+    setTimeout(() => el.remove(), 700);
+  };
+  el.addEventListener('click', dismiss);
+  setTimeout(dismiss, REDUCED_MOTION ? 900 : 3400);
+})();
  
 /* ================================================================
    INIT
@@ -1641,8 +1697,9 @@ function openSearch() {
   input.value = '';
   // Only offer "close" once there is a camera view to go back to.
   document.getElementById('search-close').classList.toggle('is-hidden', !streamReady());
-  // On phones, auto-focusing would raise the keyboard over the list.
-  if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) input.focus();
+  // On phones, auto-focusing would raise the keyboard over the list. preventScroll
+  // stops the browser from scrolling the fixed layout to reveal the sliding-in panel.
+  if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) input.focus({ preventScroll: true });
   renderSearchResults('');
 }
  
@@ -2017,3 +2074,4 @@ window.addEventListener('beforeunload', () => {
 </script>
 </body>
 </html>
+ 
