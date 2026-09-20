@@ -200,7 +200,19 @@
     <div style="font-size:52px;margin-bottom:16px">🧭</div>
     <h2 style="color:#fff;font-size:20px;margin-bottom:8px">Start AR Navigation</h2>
     <p style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.5;text-align:center;max-width:280px;margin-bottom:20px">Tap below to allow camera and location access so the compass can guide you to your destination.</p>
-    <button onclick="beginFromGate()" style="background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Start Navigation</button>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:6px 14px;margin-bottom:16px;width:100%;max-width:280px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0">
+        <span style="color:#fff;font-size:13px">📷 Camera</span>
+        <span id="perm-camera" style="font-weight:700;font-size:13px;color:#94a3b8">…</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid rgba(255,255,255,.08)">
+        <span style="color:#fff;font-size:13px">📍 Location / GPS</span>
+        <span id="perm-location" style="font-weight:700;font-size:13px;color:#94a3b8">…</span>
+      </div>
+    </div>
+    <button id="gate-start-btn" onclick="beginFromGate()" style="background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Start Navigation</button>
+    <button id="gate-retry" onclick="retryGate()" style="display:none;margin-top:12px;background:rgba(255,255,255,.12);color:#fff;border:none;padding:9px 26px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Retry permissions</button>
+    <p id="gate-hint" style="color:#fbbf24;font-size:12px;line-height:1.5;text-align:center;max-width:300px;margin-top:14px"></p>
   </div>
 
   <!-- Location permission gate (search entry — asks explicitly and auto-opens GPS) -->
@@ -10639,6 +10651,10 @@ window.addEventListener('load', async () => {
     hideLoading();
     openSearch();
   }
+
+  // Show the camera / location permission state up front so users know whether
+  // the browser will ask, already allowed it, or has it blocked.
+  checkPermissionStates();
 });
 
 function tryAutoGPS(showPrompt) {
@@ -10676,11 +10692,70 @@ function hideLoading() {
   document.getElementById('loading').classList.add('hidden');
 }
 
-async function beginFromGate() {
+async function queryPerm(name) {
+  try {
+    if (!navigator.permissions || !navigator.permissions.query) return 'unsupported';
+    const s = await navigator.permissions.query({ name });
+    return s.state;
+  } catch (e) {
+    return 'unsupported';
+  }
+}
+
+function setPermStatus(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (state === 'granted') { el.textContent = '✓ allowed'; el.style.color = '#22c55e'; }
+  else if (state === 'denied') { el.textContent = '✕ blocked'; el.style.color = '#f87171'; }
+  else { el.textContent = 'will ask'; el.style.color = '#94a3b8'; }
+}
+
+async function checkPermissionStates() {
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+
+  const hint = document.getElementById('gate-hint');
+  if (!hint) return;
+  const bad = [];
+  if (cam === 'denied') bad.push('Camera is blocked');
+  if (loc === 'denied') bad.push('Location is blocked');
+  if (bad.length) {
+    hint.innerHTML = '⚠️ ' + bad.join(' · ') + '. Open Chrome ▸ ⋮ ▸ Site settings to allow, then tap Start.';
+  } else if (cam === 'granted' && loc === 'granted') {
+    hint.innerHTML = 'Camera and location are already allowed — Chrome won\'t ask again. Tap Start to continue.';
+  }
+}
+
+let gateAllowOnce = false;
+
+function enterFromGate() {
   const gate = document.getElementById('start-gate');
   if (gate) gate.style.display = 'none';
-  const params = new URLSearchParams(location.search);
-  const d = params.get('dest');
+  const d = new URLSearchParams(location.search).get('dest');
+  if (!dest && d && BUILDINGS[d]) setDestination(d);
+}
+
+function retryGate() {
+  gateAllowOnce = false;
+  const btn = document.getElementById('gate-start-btn');
+  const retry = document.getElementById('gate-retry');
+  if (btn) btn.textContent = 'Start Navigation';
+  if (retry) retry.style.display = 'none';
+  setPermStatus('perm-camera', 'prompt');
+  setPermStatus('perm-location', 'prompt');
+  beginFromGate();
+}
+
+async function beginFromGate() {
+  const btn = document.getElementById('gate-start-btn');
+  const hint = document.getElementById('gate-hint');
+
+  // Second tap after a denial continues anyway (permissions already requested).
+  if (gateAllowOnce) { enterFromGate(); return; }
+
+  if (hint) hint.textContent = 'Please allow the Camera and Location prompts your browser shows.';
 
   // 1) Ask for location SYNCHRONOUSLY inside this tap. iOS/Android hide the
   //    permission dialog if geolocation is requested after the async camera
@@ -10692,9 +10767,33 @@ async function beginFromGate() {
   requestCompassPermission();
 
   // 2) Camera permission (the dialog queues behind the location one on iOS).
-  await initCamera();
+  const camOK = await initCamera();
 
-  if (!dest && d && BUILDINGS[d]) setDestination(d);
+  // Show what actually happened after the browser prompts appear.
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+
+  if (camOK && loc === 'granted') { enterFromGate(); return; }
+
+  // A permission was denied or blocked — keep the gate up so the user can
+  // decide instead of silently continuing into AR.
+  gateAllowOnce = true;
+  if (btn) btn.textContent = 'Continue anyway';
+  const retry = document.getElementById('gate-retry');
+  if (retry) retry.style.display = '';
+
+  const missing = [];
+  if (!camOK) missing.push('Camera');
+  if (loc !== 'granted') missing.push('Location/GPS');
+  if (hint) {
+    hint.innerHTML =
+      '<b style="color:#fbbf24">' + missing.join(' & ') + ' is not allowed yet.</b><br>' +
+      'To be asked again, open Chrome ▸ ⋮ ▸ Site settings ▸ ' + (missing.join(' / ')) + ' ▸ "Ask first" or Allow, then tap Retry.<br>' +
+      '<small>Tip: once you allow a permission, Chrome remembers it and will not re-ask.</small>';
+  }
+  showToast('Allow camera & location, then tap Continue');
 }
 
 async function initCamera() {
