@@ -87,6 +87,7 @@
   .dir-icon svg{width:30px;height:30px}
   .dir-label{font-size:10px;color:rgba(255,255,255,.6);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
   .dir-text{font-size:14px;font-weight:800;color:#fff;line-height:1.3}
+  .target-meta{font:600 9px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(255,255,255,.58);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* Stats row */
   .stats-row{display:flex;gap:8px;margin:10px 12px 0}
@@ -95,6 +96,8 @@
   .stat-lbl{font-size:8px;color:rgba(255,255,255,.62);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
   .stat.big .stat-val{font-size:18px;color:#fff}
   .stat.big .stat-lbl{color:var(--gold)}
+  .gps-readout{margin:6px 12px 0;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;color:rgba(255,255,255,.72);font:600 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.15px;text-shadow:0 1px 3px rgba(0,0,0,.35)}
+  .gps-readout span{padding:4px 7px;border-radius:8px;background:rgba(0,40,85,.52);border:1px solid rgba(255,255,255,.10)}
 
   /* Buttons */
   .btn-row{display:flex;gap:8px}
@@ -277,6 +280,7 @@
       <div class="nav-banner-main">
         <div class="panel-name" id="p-name"></div>
         <div class="dir-text" id="dir-text"></div>
+        <div class="target-meta" id="target-meta">TARGET --</div>
       </div>
       <button class="btn-scan-mini ghost" id="voice-btn" onclick="toggleVoice()" title="Voice guide">
         <svg id="voice-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
@@ -287,6 +291,9 @@
       <div class="stat"><div class="stat-val" id="s-time">--</div><div class="stat-lbl">Time</div></div>
       <div class="stat"><div class="stat-val" id="s-gps">--</div><div class="stat-lbl">GPS</div></div>
       <div class="stat"><div class="stat-val" id="s-alt">--</div><div class="stat-lbl">Alt</div></div>
+    </div>
+    <div class="gps-readout" id="gps-readout">
+      <span>LAT --</span><span>LNG --</span><span>ALT --</span>
     </div>
   </div>
 
@@ -484,11 +491,17 @@ let animFrame = null;
 let dest = null;          // current building key
 let stepIdx = 0;          // current step index
 let startDist = 0;        // GPS distance from first fix to destination (for step auto-advance)
-let gpsPos = null;        // {lat, lng}
+let gpsPos = null;        // {lat, lng, acc, alt, altAcc}
 let heading = 0;          // smoothed compass heading degrees
 let rawHeading = -1;      // last raw compass reading (for smoothing)
-let bearing = 0;          // bearing to destination degrees
-let distToDest = 0;       // metres
+let cameraPitch = 0;      // camera optical-axis pitch relative to the horizon
+let rawPitch = null;
+let bearing = 0;          // bearing to ACTIVE waypoint degrees
+let distToDest = 0;       // metres to final destination
+let distToTarget = 0;     // metres to ACTIVE waypoint
+let verticalAngle = 0;    // elevation angle to ACTIVE waypoint
+let targetAltitude = null;
+let elevationRequestId = 0;
 let userSpeed = 1.4;      // walking speed m/s estimate
 let lastGpsTime = 0;
 let lastGpsDist = 0;
@@ -814,13 +827,21 @@ function onGpsCoords(c) {
   const now = Date.now();
   const newLat = c.latitude;
   const newLng = c.longitude;
-  const newAcc = c.accuracy;
+  const newAcc = Number.isFinite(c.accuracy) ? c.accuracy : 999;
+
+  // Ignore impossible/clearly unusable fixes instead of letting them jump the
+  // route or falsely trigger a waypoint.
+  if (!Number.isFinite(newLat) || !Number.isFinite(newLng) ||
+      Math.abs(newLat) > 90 || Math.abs(newLng) > 180) return;
 
   if (gpsPos) {
     const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
     const dt = (now - lastGpsTime) / 1000;
     if (dt > 0 && d > 2) {
-      userSpeed = d / dt;
+      const measured = d / dt;
+      if (measured >= 0.3 && measured <= 3.0) {
+        userSpeed = userSpeed * 0.75 + measured * 0.25;
+      }
     }
   }
 
@@ -828,9 +849,18 @@ function onGpsCoords(c) {
     lat: newLat,
     lng: newLng,
     acc: newAcc,
-    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? Math.round(c.altitude) : null,
-    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined) ? Math.round(c.altitudeAccuracy) : null
+    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? c.altitude : null,
+    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined && isFinite(c.altitudeAccuracy)) ? c.altitudeAccuracy : null
   };
+
+  const readout = document.getElementById('gps-readout');
+  if (readout) {
+    const altText = Number.isFinite(gpsPos.alt) ? gpsPos.alt.toFixed(1) + 'm' : '--';
+    readout.innerHTML =
+      '<span>LAT ' + gpsPos.lat.toFixed(6) + '</span>' +
+      '<span>LNG ' + gpsPos.lng.toFixed(6) + '</span>' +
+      '<span>ALT ' + altText + '</span>';
+  }
   lastGpsTime = now;
 
   const dot = document.getElementById('gps-dot');
@@ -894,10 +924,8 @@ function updateArrowRotation() {
   arrowRotation = (diff * Math.PI) / 180;
 }
 
-// Waypoint navigation: each building's surveyed latitude/longitude waypoints
-// (turn-by-turn points, ending at the building itself) steer the arrow in
-// sequence — NOT the map footpath. StepIdx targets waypoints[stepIdx], then
-// the building's own coordinates once every waypoint is passed.
+// Each waypoint is a real WGS84 coordinate. The active target changes only after
+// the user's live GPS fix enters the waypoint's acceptance radius.
 function targetForStep() {
   const b = BUILDINGS[dest];
   if (!b) return null;
@@ -906,33 +934,62 @@ function targetForStep() {
   return idx < wps.length ? wps[idx] : b;
 }
 
+function getTargetAltitude(t) {
+  if (!t) return null;
+  if (Number.isFinite(t.alt)) return t.alt;
+  const b = BUILDINGS[dest];
+  if (b && Number.isFinite(b.alt)) return b.alt;
+  return null;
+}
+
 function updateDistanceAndBearing() {
   if (!gpsPos || !dest) return;
   const b = BUILDINGS[dest];
   const t = targetForStep() || b;
 
   distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+  distToTarget = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
 
-  // Aim the arrow at the ACTIVE waypoint (next turn), not the building centroid,
-  // so it tracks your position along the surveyed lat/lng line.
+  // Horizontal bearing is always calculated from the user's CURRENT GPS fix
+  // to the ACTIVE waypoint. This prevents the arrow from being locked to the
+  // original starting position.
   bearing = calcBearing(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
 
-  // Update stats
-  document.getElementById('s-dist').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
-  const eta = Math.max(1, Math.round(distToDest / userSpeed / 60));
+  // Vertical AR component: only trust it when both ends have elevation data and
+  // the user's reported altitude has a reasonable accuracy.
+  targetAltitude = getTargetAltitude(t);
+  if (Number.isFinite(targetAltitude) &&
+      Number.isFinite(gpsPos.alt) &&
+      (!gpsPos.altAcc || gpsPos.altAcc <= 25)) {
+    verticalAngle = Math.atan2(
+      targetAltitude - gpsPos.alt,
+      Math.max(1, distToTarget)
+    );
+  } else {
+    verticalAngle = 0;
+  }
+
+  // Update stats from LIVE GPS, never from hard-coded distance/time values.
+  document.getElementById('s-dist').textContent =
+    distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest / 1000).toFixed(1) + 'km';
+  const eta = Math.max(1, Math.round(distToDest / Math.max(0.7, userSpeed) / 60));
   document.getElementById('s-time').textContent = '~' + eta + ' min';
-  document.getElementById('s-gps').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
+  document.getElementById('s-gps').textContent =
+    gpsPos.acc ? '±' + Math.round(gpsPos.acc) + 'm' : '--';
   const sAlt = document.getElementById('s-alt');
-  if (sAlt) sAlt.textContent = gpsPos.alt !== null && gpsPos.alt !== undefined ? gpsPos.alt + 'm' : '--';
+  if (sAlt) {
+    sAlt.textContent = Number.isFinite(gpsPos.alt)
+      ? Math.round(gpsPos.alt) + 'm'
+      : '--';
+  }
 
-  // Arrow rotation: difference between compass heading and bearing to the target
   updateArrowRotation();
-
-  // Advance through the surveyed waypoints as each one is reached
   autoAdvanceSteps();
 
-  // Arrival check
-  if (distToDest < 20 && !arrived) {
+  // Arrival is based on the destination coordinate, with a radius that respects
+  // the actual GPS uncertainty. Do not claim arrival from a single noisy fix.
+  const arriveAt = Math.max(8, Math.min(25, (gpsPos.acc || 10) * 0.8));
+  if (distToDest <= arriveAt && !arrived) {
     triggerArrival();
   }
 }
@@ -941,23 +998,24 @@ function autoAdvanceSteps() {
   if (!dest || arrived || !gpsPos) return;
   const b = BUILDINGS[dest];
   const wps = b.waypoints || [];
-  if (!wps.length) return;
-
-  // stepIdx already aims at the building itself — nothing left to advance.
-  if (stepIdx >= wps.length) return;
+  if (!wps.length || stepIdx >= wps.length) return;
 
   const t = wps[stepIdx];
   const d = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
 
-  // Treat the waypoint as reached when within this radius (GPS accuracy + small margin).
-  const arriveAt = Math.max(12, (gpsPos.acc || 10) + 6);
-  if (d < arriveAt) {
+  // Use GPS uncertainty, but cap the radius so a very poor fix does not skip
+  // several turns at once.
+  const arriveAt = Math.max(8, Math.min(20, (gpsPos.acc || 10) * 0.75));
+  if (d <= arriveAt) {
     stepIdx = Math.min(stepIdx + 1, wps.length);
     refreshUI();
+
     if (stepIdx < b.steps.length) {
-      showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
+      showToast('Next: ' + b.steps[stepIdx]);
       speak(b.steps[stepIdx]);
     }
+    // Immediately recompute the bearing to the NEW active waypoint.
+    updateDistanceAndBearing();
   }
 }
 
@@ -1032,6 +1090,20 @@ function installOrientationListener() {
     heading = (heading + 360) % 360;
     rawHeading = h;
 
+    // Estimate the camera optical-axis pitch so elevation can move the AR
+    // target vertically. Portrait: beta≈90° means the phone/camera is level.
+    if (e.beta !== null && e.beta !== undefined && isFinite(e.beta)) {
+      const screenAngle = (screen.orientation && Number.isFinite(screen.orientation.angle))
+        ? screen.orientation.angle : (window.orientation || 0);
+      let p;
+      if (screenAngle === 180) p = e.beta - 90;
+      else if (Math.abs(screenAngle) === 90) p = (e.gamma || 0);
+      else p = 90 - e.beta;
+      p = Math.max(-80, Math.min(80, p));
+      cameraPitch = rawPitch === null ? p : rawPitch + (p - rawPitch) * 0.25;
+      rawPitch = p;
+    }
+
     const needle = document.getElementById('compass-needle');
     if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
 
@@ -1047,11 +1119,49 @@ function stopCompass() {
     window.removeEventListener('deviceorientation', orientationListener, true);
     orientationListener = null;
   }
+  rawHeading = -1;
+  rawPitch = null;
 }
 
 /* ================================================================
    DESTINATION / NAVIGATION
    ================================================================ */
+async function loadRouteElevations(key) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  const points = [b, ...(b.waypoints || [])];
+  const lats = points.map(p => p.lat.toFixed(7)).join(',');
+  const lngs = points.map(p => p.lng.toFixed(7)).join(',');
+  const requestId = ++elevationRequestId;
+
+  try {
+    const url =
+      'https://api.open-meteo.com/v1/forecast' +
+      '?latitude=' + encodeURIComponent(lats) +
+      '&longitude=' + encodeURIComponent(lngs) +
+      '&current=temperature_2m&timezone=UTC';
+
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Elevation HTTP ' + resp.status);
+    const data = await resp.json();
+    if (requestId !== elevationRequestId) return;
+
+    const rows = Array.isArray(data) ? data : [data];
+    rows.forEach((row, i) => {
+      const elevation = Number(row && row.elevation);
+      if (!Number.isFinite(elevation)) return;
+      points[i].alt = elevation;
+    });
+
+    if (dest === key) { refreshUI(); updateDistanceAndBearing(); }
+  } catch (e) {
+    // Horizontal GPS navigation remains fully functional if elevation lookup
+    // is unavailable/offline.
+    console.warn('Route elevation lookup unavailable:', e);
+  }
+}
+
 function setDestination(key) {
   const b = BUILDINGS[key];
   if (!b) return;
@@ -1062,8 +1172,14 @@ function setDestination(key) {
   arrived = false;
   arrowRotation = 0;
   currentArrowRot = 0;
+  targetAltitude = null;
+  verticalAngle = 0;
 
   setDestinationUI(key);
+  if (gpsPos) updateDistanceAndBearing();
+  // Load terrain elevation for the destination and every route waypoint.
+  // Latitude/longitude remain the authoritative navigation coordinates.
+  loadRouteElevations(key);
 
   // Update URL
   const u = new URL(location);
@@ -1117,6 +1233,14 @@ function refreshUI() {
   const dirStrokes = { straight:'#003d82', left:'#1a5faf', right:'#b45309' };
   document.getElementById('dir-icon').style.background = dirColors[turn];
   document.getElementById('dir-icon').innerHTML = TURN_ICONS[turn].replace('STROKE', dirStrokes[turn]);
+
+  const target = targetForStep();
+  const targetMeta = document.getElementById('target-meta');
+  if (targetMeta && target) {
+    const alt = Number.isFinite(target.alt) ? ' · ALT ' + target.alt.toFixed(1) + 'm' : '';
+    targetMeta.textContent =
+      'TARGET ' + target.lat.toFixed(6) + ', ' + target.lng.toFixed(6) + alt;
+  }
 
   if (!gpsPos) {
     // Without GPS, estimate remaining distance from the current step onward.
@@ -1178,34 +1302,53 @@ function renderLoop(ts = 0) {
 
   if (dest && !arrived) {
     arBob += dt * 2.5;
-    const bob = Math.sin(arBob) * 10;
-    const cx = arW / 2;
-    // Anchor the arrow in the lower-middle of the camera half so the top nav
-    // strip (steps/direction) never overlaps it on short screens.
-    const cy = arH * 0.64 + bob;
+    const bob = Math.sin(arBob) * 6;
 
-    // Smooth arrow rotation
-    currentArrowRot += (arrowRotation - currentArrowRot) * 0.06;
+    // Project the active WGS84 waypoint into the camera view using:
+    //   1) live compass azimuth,
+    //   2) live GPS-to-waypoint bearing,
+    //   3) elevation angle from GPS/terrain altitude.
+    // This makes the AR marker move toward the actual target direction instead
+    // of remaining permanently in the center of the screen.
+    const projected = projectTargetToScreen();
+    const cx = projected.x;
+    const cy = projected.y + bob;
 
-    // Draw ground glow
+    currentArrowRot += (arrowRotation - currentArrowRot) * 0.10;
+
     drawGroundGlow(cx, cy + 20, ts);
-
-    // Draw pulsing rings
     drawPulseRings(cx, cy, ts);
-
-    // Draw distance circle
     drawDistanceCircle(cx, cy);
-
-    // Draw directional arrow
     drawNavigationArrow(cx, cy, currentArrowRot);
 
-    // Draw distance text in AR (below the arrow, clear of the top nav strip)
     if (distToDest > 0) {
       drawARDistanceLabel(cx, cy + 82);
     }
   }
 
   animFrame = requestAnimationFrame(renderLoop);
+}
+
+function projectTargetToScreen() {
+  const centerX = arW / 2;
+  const centerY = arH * 0.58;
+
+  if (!gpsPos || !dest) return { x: centerX, y: centerY };
+
+  const horizontalDiff = normalizeAngle(bearing - heading);
+  const hFov = 70 * Math.PI / 180;
+  const vFov = 55 * Math.PI / 180;
+
+  // Perspective-style angular projection. Clamp to the camera edges so a
+  // target behind/at the extreme side remains visible as an off-screen cue.
+  const xNorm = Math.tan(horizontalDiff * Math.PI / 180) / Math.tan(hFov / 2);
+  const x = Math.max(34, Math.min(arW - 34, centerX + xNorm * (arW / 2)));
+
+  const relativeElevation = verticalAngle - (cameraPitch * Math.PI / 180);
+  const yNorm = Math.tan(relativeElevation) / Math.tan(vFov / 2);
+  const y = Math.max(arH * 0.20, Math.min(arH * 0.82, centerY - yNorm * (arH / 2)));
+
+  return { x, y };
 }
 
 function drawNavigationArrow(x, y, angle) {
