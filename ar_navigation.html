@@ -306,6 +306,7 @@
       <div class="stat big"><div class="stat-val" id="s-dist">--</div><div class="stat-lbl">Distance</div></div>
       <div class="stat"><div class="stat-val" id="s-time">--</div><div class="stat-lbl">Time</div></div>
       <div class="stat"><div class="stat-val" id="s-gps">--</div><div class="stat-lbl">GPS</div></div>
+      <div class="stat"><div class="stat-val" id="s-alt">--</div><div class="stat-lbl">Alt</div></div>
     </div>
   </div>
 
@@ -10948,7 +10949,13 @@ function onGpsCoords(c) {
     }
   }
 
-  gpsPos = { lat: newLat, lng: newLng, acc: newAcc };
+  gpsPos = {
+    lat: newLat,
+    lng: newLng,
+    acc: newAcc,
+    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? Math.round(c.altitude) : null,
+    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined) ? Math.round(c.altitudeAccuracy) : null
+  };
   lastGpsTime = now;
 
   const dot = document.getElementById('gps-dot');
@@ -11012,28 +11019,41 @@ function updateArrowRotation() {
   arrowRotation = (diff * Math.PI) / 180;
 }
 
-// Ordered navigation points for a building: every GPS turn waypoint, then the
-// destination itself. Step i (i>=1) is reached when you arrive at points[i-1].
-// Direct GPS navigation: aim the arrow straight at the building's own
-// latitude/longitude (no pathway, no waypoints) and report the straight-line
-// distance/heading to it.
+// Waypoint navigation: each building's surveyed latitude/longitude waypoints
+// (turn-by-turn points, ending at the building itself) steer the arrow in
+// sequence — NOT the map footpath. StepIdx targets waypoints[stepIdx], then
+// the building's own coordinates once every waypoint is passed.
+function targetForStep() {
+  const b = BUILDINGS[dest];
+  if (!b) return null;
+  const wps = b.waypoints || [];
+  const idx = Math.min(stepIdx, wps.length);
+  return idx < wps.length ? wps[idx] : b;
+}
+
 function updateDistanceAndBearing() {
   if (!gpsPos || !dest) return;
   const b = BUILDINGS[dest];
+  const t = targetForStep() || b;
 
   distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-  bearing = calcBearing(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+
+  // Aim the arrow at the ACTIVE waypoint (next turn), not the building centroid,
+  // so it tracks your position along the surveyed lat/lng line.
+  bearing = calcBearing(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
 
   // Update stats
   document.getElementById('s-dist').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
   const eta = Math.max(1, Math.round(distToDest / userSpeed / 60));
   document.getElementById('s-time').textContent = '~' + eta + ' min';
   document.getElementById('s-gps').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
+  const sAlt = document.getElementById('s-alt');
+  if (sAlt) sAlt.textContent = gpsPos.alt !== null && gpsPos.alt !== undefined ? gpsPos.alt + 'm' : '--';
 
-  // Arrow rotation: difference between compass heading and bearing to destination
+  // Arrow rotation: difference between compass heading and bearing to the target
   updateArrowRotation();
 
-  // Auto-advance steps based on how much of the straight-line distance remains
+  // Advance through the surveyed waypoints as each one is reached
   autoAdvanceSteps();
 
   // Arrival check
@@ -11045,31 +11065,23 @@ function updateDistanceAndBearing() {
 function autoAdvanceSteps() {
   if (!dest || arrived || !gpsPos) return;
   const b = BUILDINGS[dest];
-  const totalSteps = b.steps.length;
-  if (totalSteps <= 1) return;
+  const wps = b.waypoints || [];
+  if (!wps.length) return;
 
-  // Percentage-based auto-advance down the step list as you close in on the
-  // building's coordinates.
-  const total = startDist || parseFloat(b.dist) || 200;
-  if (total <= 0) return;
-  const remainingFraction = distToDest / total;
+  // stepIdx already aims at the building itself — nothing left to advance.
+  if (stepIdx >= wps.length) return;
 
-  const thresholds = [0.95, 0.7, 0.45, 0.25, 0.1];
-  const maxStep = Math.min(totalSteps - 1, thresholds.length);
+  const t = wps[stepIdx];
+  const d = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
 
-  let newStep = 0;
-  for (let i = 0; i < maxStep; i++) {
-    if (remainingFraction < thresholds[i]) newStep = i + 1;
-  }
-  newStep = Math.min(newStep, totalSteps - 1);
-
-  if (newStep > stepIdx) {
-    stepIdx = newStep;
+  // Treat the waypoint as reached when within this radius (GPS accuracy + small margin).
+  const arriveAt = Math.max(12, (gpsPos.acc || 10) + 6);
+  if (d < arriveAt) {
+    stepIdx = Math.min(stepIdx + 1, wps.length);
     refreshUI();
-    showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
-    speak(b.steps[stepIdx]);
-    if (stepIdx >= totalSteps - 1 && distToDest < 60) {
-      triggerArrival();
+    if (stepIdx < b.steps.length) {
+      showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
+      speak(b.steps[stepIdx]);
     }
   }
 }
