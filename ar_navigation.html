@@ -1305,7 +1305,7 @@ function renderLoop(ts = 0) {
     // GPS + compass still determine the rotation, but the marker itself
     // never slides around the screen. This is calmer and much easier to follow.
     const cx = arW / 2;
-    const cy = arH * 0.58;
+    const cy = arH / 2;
 
     // Smooth compass/GPS changes so the arrow does not twitch when the
     // phone's heading fluctuates by a few degrees.
