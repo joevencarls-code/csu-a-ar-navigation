@@ -363,7 +363,7 @@
 </div>
 
 <script>
-    /* jsQR QR-scan library removed � search-only navigation */
+    /* jsQR QR-scan library removed — search-only navigation */
 
 /* ================================================================
    BUILDING DATA — CSU-A Campus
@@ -1301,20 +1301,18 @@ function renderLoop(ts = 0) {
   arCtx.clearRect(0, 0, arW, arH);
 
   if (dest && !arrived) {
-    arBob += dt * 2.5;
-    const bob = Math.sin(arBob) * 6;
+    // Keep the visual guide locked to the center of the camera.
+    // GPS + compass still determine the rotation, but the marker itself
+    // never slides around the screen. This is calmer and much easier to follow.
+    const cx = arW / 2;
+    const cy = arH * 0.58;
 
-    // Project the active WGS84 waypoint into the camera view using:
-    //   1) live compass azimuth,
-    //   2) live GPS-to-waypoint bearing,
-    //   3) elevation angle from GPS/terrain altitude.
-    // This makes the AR marker move toward the actual target direction instead
-    // of remaining permanently in the center of the screen.
-    const projected = projectTargetToScreen();
-    const cx = projected.x;
-    const cy = projected.y + bob;
-
-    currentArrowRot += (arrowRotation - currentArrowRot) * 0.10;
+    // Smooth compass/GPS changes so the arrow does not twitch when the
+    // phone's heading fluctuates by a few degrees.
+    let angleDelta = normalizeAngle(
+      (arrowRotation - currentArrowRot) * 180 / Math.PI
+    ) * Math.PI / 180;
+    currentArrowRot += angleDelta * Math.min(1, dt * 8);
 
     drawGroundGlow(cx, cy + 20, ts);
     drawPulseRings(cx, cy, ts);
@@ -1621,8 +1619,8 @@ function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-clearTimeout(showToast._timer);
-   showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
 /* ================================================================
