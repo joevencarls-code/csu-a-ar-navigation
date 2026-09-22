@@ -233,6 +233,15 @@
   .search-empty{text-align:center;padding:56px 28px;color:var(--mist);font-size:16px;line-height:1.5}
   .search-empty svg{width:44px;height:44px;color:#9fb0c8;margin-bottom:12px}
   .search-empty b{color:var(--ink)}
+  .route-start{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px 4px}
+  .route-start-btn{display:flex;align-items:center;gap:9px;text-align:left;min-height:58px;padding:9px 10px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+  .route-start-btn.active{border-color:var(--blue-2);box-shadow:inset 0 0 0 1px var(--blue-2);background:#f4f8ff}
+  .route-start-btn>span:first-child{font-size:20px;flex-shrink:0}
+  .route-start-btn b{display:block;font:600 14px/1.1 var(--font-body)}
+  .route-start-btn small{display:block;margin-top:3px;font-size:11px;color:var(--mist)}
+  .route-source-picker{padding:8px 16px 4px}
+  .route-source-picker label{display:block;font-size:12px;color:var(--mist);margin-bottom:5px}
+  .route-source-picker select{width:100%;height:44px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:0 10px;font:500 15px var(--font-body)}
  
  
   /* ── Launch splash: full logo animation, plays once, tap to skip ── */
@@ -463,6 +472,18 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="search" class="search-input" id="search-input" placeholder="Building, office or code (e.g. CICS)" autocomplete="off" aria-label="Search buildings">
       </label>
+      <div class="route-start">
+        <button type="button" class="route-start-btn active" id="start-current-btn" onclick="chooseRouteStart('current')">
+          <span>📍</span><span><b>Start from my location</b><small>Use live GPS position</small></span>
+        </button>
+        <button type="button" class="route-start-btn" id="start-building-btn" onclick="chooseRouteStart('building')">
+          <span>🏢</span><span><b>Start from a building</b><small>CICS → Admin, etc.</small></span>
+        </button>
+      </div>
+      <div class="route-source-picker" id="route-source-picker" style="display:none">
+        <label for="route-source">Starting building</label>
+        <select id="route-source" onchange="setBuildingRouteSource(this.value)"></select>
+      </div>
     </div>
     <button class="search-locate" id="search-locate" onclick="useMyLocation()" title="Allow your location to sort results by distance">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
@@ -622,6 +643,16 @@ let animFrame = null;
 let dest = null;          // current building key
 let stepIdx = 0;          // index of the ACTIVE leg / waypoint
 let startDist = 0;        // GPS distance from first fix to destination (for step auto-advance)
+
+// Route origin mode:
+// gate = legacy QR/gate route (unchanged)
+// current = live phone GPS -> destination
+// building = selected building -> destination
+let routeMode = 'gate';
+let routeSourceKey = null;
+let activeRouteWaypoints = null;
+let activeRouteSteps = null;
+let activeRouteStart = null;
 let gpsPos = null;        // {lat, lng, acc, alt, altAcc}
 let heading = 0;          // smoothed compass heading degrees
 let rawHeading = -1;      // last raw compass reading (for smoothing)
@@ -777,8 +808,13 @@ async function checkPermissionStates() {
 function enterFromGate() {
   const gate = document.getElementById('start-gate');
   if (gate) gate.style.display = 'none';
-  const d = new URLSearchParams(location.search).get('dest');
-  if (!dest && d && BUILDINGS[d]) setDestination(d);
+  const params = new URLSearchParams(location.search);
+  const d = params.get('dest');
+  const start = params.get('start');
+  if (start === 'current') routeMode = 'current';
+  else if (start && BUILDINGS[start]) { routeMode = 'building'; routeSourceKey = start; }
+  else routeMode = 'gate';
+  if (!dest && d && BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
 }
  
 const GATE_BTN_HTML =
@@ -1078,22 +1114,33 @@ function updateArrowRotation() {
  
 // Each waypoint is a real WGS84 coordinate. The active target changes only after
 // the user's live GPS fix enters the waypoint's acceptance radius.
+function getRouteWaypoints() {
+  if (Array.isArray(activeRouteWaypoints)) return activeRouteWaypoints;
+  const b = BUILDINGS[dest];
+  return b ? (b.waypoints || []) : [];
+}
+
+function getRouteSteps() {
+  if (Array.isArray(activeRouteSteps) && activeRouteSteps.length) return activeRouteSteps;
+  const b = BUILDINGS[dest];
+  return b ? b.steps : [];
+}
+
+// The active target is always a real WGS84 coordinate. For dynamic routes,
+// the destination is the final target and there are no gate-only waypoints.
 function targetForStep() {
   const b = BUILDINGS[dest];
   if (!b) return null;
-  const wps = b.waypoints || [];
+  const wps = getRouteWaypoints();
   const idx = Math.min(stepIdx, wps.length);
   return idx < wps.length ? wps[idx] : b;
 }
- 
-// steps[0] is the "start" line; steps[i + 1] describes the leg that ends at
-// waypoint i (the last step is the final approach to the building). So the
-// instruction for the ACTIVE leg is steps[stepIdx + 1].
+
 function legText(i) {
-  const b = BUILDINGS[dest];
-  return b.steps[Math.min(i + 1, b.steps.length - 1)];
+  const steps = getRouteSteps();
+  return steps[Math.min(i + 1, Math.max(0, steps.length - 1))] || ('Continue to ' + (BUILDINGS[dest]?.name || 'destination'));
 }
- 
+
 function getTargetAltitude(t) {
   if (!t) return null;
   if (Number.isFinite(t.alt)) return t.alt;
@@ -1101,223 +1148,64 @@ function getTargetAltitude(t) {
   if (b && Number.isFinite(b.alt)) return b.alt;
   return null;
 }
- 
-function updateDistanceAndBearing() {
-  if (!gpsPos || !dest) return;
-  const b = BUILDINGS[dest];
-  const t = targetForStep() || b;
- 
-  distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-  distToTarget = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
- 
-  // Horizontal bearing is always calculated from the user's CURRENT GPS fix
-  // to the ACTIVE waypoint. This prevents the arrow from being locked to the
-  // original starting position.
-  bearing = calcBearing(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
- 
-  // Vertical AR component: only trust it when both ends have elevation data and
-  // the user's reported altitude has a reasonable accuracy.
-  targetAltitude = getTargetAltitude(t);
-  if (Number.isFinite(targetAltitude) &&
-      Number.isFinite(gpsPos.alt) &&
-      (!gpsPos.altAcc || gpsPos.altAcc <= 25)) {
-    verticalAngle = Math.atan2(
-      targetAltitude - gpsPos.alt,
-      Math.max(1, distToTarget)
-    );
-  } else {
-    verticalAngle = 0;
-  }
- 
-  // Update stats from LIVE GPS, never from hard-coded distance/time values.
-  document.getElementById('s-dist').textContent = fmtDist(distToDest);
-  const eta = Math.max(1, Math.round(distToDest / Math.max(0.7, userSpeed) / 60));
-  document.getElementById('s-time').textContent = '~' + eta + ' min';
-  document.getElementById('s-gps').textContent =
-    gpsPos.acc ? '±' + Math.round(gpsPos.acc) + 'm' : '--';
- 
-  updateArrowRotation();
-  autoAdvanceSteps();
- 
-  // Arrival is based on the destination coordinate, with a radius that respects
-  // the actual GPS uncertainty. Do not claim arrival from a single noisy fix.
-  const arriveAt = Math.max(8, Math.min(25, (gpsPos.acc || 10) * 0.8));
-  if (distToDest <= arriveAt && !arrived) {
-    triggerArrival();
-  }
-}
- 
-function autoAdvanceSteps() {
-  if (!dest || arrived || !gpsPos) return;
-  const b = BUILDINGS[dest];
-  const wps = b.waypoints || [];
-  if (!wps.length || stepIdx >= wps.length) return;
- 
-  const t = wps[stepIdx];
-  const d = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
- 
-  // Use GPS uncertainty, but cap the radius so a very poor fix does not skip
-  // several turns at once.
-  const arriveAt = Math.max(8, Math.min(20, (gpsPos.acc || 10) * 0.75));
-  if (d <= arriveAt) {
-    stepIdx = Math.min(stepIdx + 1, wps.length);
-    refreshUI();
- 
-    showToast('Next: ' + legText(stepIdx));
-    speak(legText(stepIdx));
-    // Immediately recompute the bearing to the NEW active waypoint.
-    updateDistanceAndBearing();
-  }
-}
- 
-function triggerArrival() {
-  arrived = true;
-  resetFeedbackUI();
-  const b = BUILDINGS[dest];
-  document.getElementById('arrival-msg').textContent = 'You have reached ' + b.name;
-  document.getElementById('arrival').classList.add('show');
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  showToast('You have arrived!');
-  speak('You have arrived at ' + b.name + '.');
-}
- 
-/* ================================================================
-   COMPASS / ORIENTATION
-   ================================================================ */
-// Tilt-compensated compass heading from the W3C DeviceOrientation spec:
-// heading of the horizontal component of the vector pointing out the back of the screen.
-// Correct in any orientation (portrait/landscape/flat), unlike (360 - alpha),
-// which only works when the device is held flat.
-function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
-  const d2r = Math.PI / 180;
-  const x = betaDeg * d2r;
-  const y = gammaDeg * d2r;
-  const z = alphaDeg * d2r;
-  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
-  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
-  let Vx = -cZ * sY - sZ * sX * cY;
-  let Vy = -sZ * sY + cZ * sX * cY;
-  let h = Math.atan(Vx / Vy);
-  if (Vy < 0) h += Math.PI;
-  else if (Vx < 0) h += 2 * Math.PI;
-  return (h * (180 / Math.PI) + 360) % 360;
-}
- 
-function startCompass() {
-  requestCompassPermission();
-}
- 
-// Ask for device-orientation permission and install the listener. On iOS this
-// must run inside a user gesture (the start tap) or the prompt never appears.
-function requestCompassPermission() {
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then(state => {
-      if (state === 'granted') installOrientationListener();
-    }).catch(() => {});
-  } else {
-    installOrientationListener();
-  }
-}
- 
-function installOrientationListener() {
-  if (compassInstalled) return; // already listening
-  compassInstalled = true;
-  orientationListener = e => {
-    let h = 0;
-    if (e.webkitCompassHeading !== undefined) {
-      h = e.webkitCompassHeading; // iOS (and Chrome on Android) — works held upright
-    } else if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
-      h = tiltCompassHeading(e.alpha, e.beta, e.gamma); // any orientation
-      if (!isFinite(h) || (Math.abs(e.beta) < 10 && Math.abs(e.gamma) < 10)) {
-        return; // device essentially flat — heading undefined/noisy, keep last good reading
-      }
-    }
-    // Smooth short-term jitter using the nearest arc so 359°->1° stays smooth
-    if (rawHeading >= 0) {
-      heading = heading + normalizeAngle(h - heading) * 0.35;
-    } else {
-      heading = h;
-    }
-    heading = (heading + 360) % 360;
-    rawHeading = h;
- 
-    // Estimate the camera optical-axis pitch so elevation can move the AR
-    // target vertically. Portrait: beta≈90° means the phone/camera is level.
-    if (e.beta !== null && e.beta !== undefined && isFinite(e.beta)) {
-      const screenAngle = (screen.orientation && Number.isFinite(screen.orientation.angle))
-        ? screen.orientation.angle : (window.orientation || 0);
-      let p;
-      if (screenAngle === 180) p = e.beta - 90;
-      else if (Math.abs(screenAngle) === 90) p = (e.gamma || 0);
-      else p = 90 - e.beta;
-      p = Math.max(-80, Math.min(80, p));
-      cameraPitch = rawPitch === null ? p : rawPitch + (p - rawPitch) * 0.25;
-      rawPitch = p;
-    }
- 
-    const needle = document.getElementById('compass-needle');
-    if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
- 
-    // Re-point the arrow immediately as the phone turns (not just on GPS fixes)
-    if (gpsPos && dest) updateArrowRotation();
-  };
-  window.addEventListener('deviceorientation', orientationListener, true);
-  document.getElementById('compass').classList.add('show');
-}
- 
-function stopCompass() {
-  if (orientationListener) {
-    window.removeEventListener('deviceorientation', orientationListener, true);
-    orientationListener = null;
-  }
-  compassInstalled = false;
-  rawHeading = -1;
-  rawPitch = null;
-}
- 
-/* ================================================================
-   DESTINATION / NAVIGATION
-   ================================================================ */
-async function loadRouteElevations(key) {
+
+function buildDynamicRoute(key) {
   const b = BUILDINGS[key];
   if (!b) return;
- 
-  const points = [b, ...(b.waypoints || [])];
-  const lats = points.map(p => p.lat.toFixed(7)).join(',');
-  const lngs = points.map(p => p.lng.toFixed(7)).join(',');
-  const requestId = ++elevationRequestId;
- 
-  try {
-    const url =
-      'https://api.open-meteo.com/v1/forecast' +
-      '?latitude=' + encodeURIComponent(lats) +
-      '&longitude=' + encodeURIComponent(lngs) +
-      '&current=temperature_2m&timezone=UTC';
- 
-    const resp = await fetch(url, { cache: 'no-store' });
-    if (!resp.ok) throw new Error('Elevation HTTP ' + resp.status);
-    const data = await resp.json();
-    if (requestId !== elevationRequestId) return;
- 
-    const rows = Array.isArray(data) ? data : [data];
-    rows.forEach((row, i) => {
-      const elevation = Number(row && row.elevation);
-      if (!Number.isFinite(elevation)) return;
-      points[i].alt = elevation;
-    });
- 
-    if (dest === key) { refreshUI(); updateDistanceAndBearing(); }
-  } catch (e) {
-    // Horizontal GPS navigation remains fully functional if elevation lookup
-    // is unavailable/offline.
-    console.warn('Route elevation lookup unavailable:', e);
+
+  // Current GPS is the true origin. A selected building is a fixed origin.
+  let source = null;
+  let sourceName = '';
+
+  if (routeMode === 'current') {
+    if (!gpsPos) {
+      showToast('Waiting for your GPS position…');
+      startGPS();
+      return false;
+    }
+    source = {
+      lat: gpsPos.lat, lng: gpsPos.lng,
+      alt: Number.isFinite(gpsPos.alt) ? gpsPos.alt : null
+    };
+    sourceName = 'Your current location';
+  } else if (routeMode === 'building') {
+    const sb = BUILDINGS[routeSourceKey];
+    if (!sb || routeSourceKey === key) {
+      showToast(routeSourceKey === key ? 'Choose a different starting building' : 'Choose a starting building');
+      return false;
+    }
+    source = {lat: sb.lat, lng: sb.lng, alt: Number.isFinite(sb.alt) ? sb.alt : null};
+    sourceName = sb.name;
   }
+
+  activeRouteStart = source;
+  activeRouteWaypoints = []; // dynamic routes do not reuse gate-only waypoints
+  activeRouteSteps = [
+    'Starting from ' + sourceName,
+    'Walk toward ' + b.name + ' using the live AR direction',
+    'You have arrived at ' + b.name
+  ];
+
+  // Keep the source visible in the route details.
+  return true;
 }
- 
-function setDestination(key) {
+
+function setDestination(key, options = {}) {
   const b = BUILDINGS[key];
   if (!b) return;
- 
+
+  if (options.mode) routeMode = options.mode;
+  if (options.sourceKey !== undefined) routeSourceKey = options.sourceKey;
+
+  // Preserve the original QR/gate behavior unless a new route mode was chosen.
+  if (routeMode === 'gate') {
+    activeRouteWaypoints = b.waypoints || [];
+    activeRouteSteps = b.steps || [];
+    activeRouteStart = null;
+  } else if (!buildDynamicRoute(key)) {
+    return;
+  }
+
   dest = key;
   stepIdx = 0;
   startDist = 0;
@@ -1326,26 +1214,26 @@ function setDestination(key) {
   currentArrowRot = 0;
   targetAltitude = null;
   verticalAngle = 0;
- 
+
   setDestinationUI(key);
   if (gpsPos) updateDistanceAndBearing();
-  // Load terrain elevation for the destination and every route waypoint.
-  // Latitude/longitude remain the authoritative navigation coordinates.
   loadRouteElevations(key);
- 
-  // Update URL
+
   const u = new URL(location);
   u.searchParams.set('dest', key);
+  if (routeMode !== 'gate') {
+    u.searchParams.set('start', routeMode === 'current' ? 'current' : routeSourceKey);
+  } else {
+    u.searchParams.delete('start');
+  }
   history.replaceState({}, '', u);
- 
-  // Start GPS + compass
+
   startGPS();
   startCompass();
- 
-  // Voice guide: announce the destination and the first leg
+
   speak('Navigating to ' + b.name + '. ' + legText(0));
 }
- 
+
 function setDestinationUI(key) {
   const b = BUILDINGS[key];
   if (!b) return;
@@ -1430,6 +1318,11 @@ function finishNavigation() {
   stepIdx = 0;
   startDist = 0;
   arrived = false;
+  routeMode = 'gate';
+  routeSourceKey = null;
+  activeRouteWaypoints = null;
+  activeRouteSteps = null;
+  activeRouteStart = null;
  
   document.getElementById('nav-top').classList.remove('show');
   document.getElementById('nav-bottom').classList.remove('show');
@@ -1693,6 +1586,8 @@ function esc(s) {
  
 function openSearch() {
   document.getElementById('search-overlay').classList.remove('hidden');
+  populateRouteSources();
+  updateRouteStartUI();
   const input = document.getElementById('search-input');
   input.value = '';
   // Only offer "close" once there is a camera view to go back to.
@@ -1707,6 +1602,44 @@ function closeSearch() {
   document.getElementById('search-overlay').classList.add('hidden');
 }
  
+function populateRouteSources() {
+  const select = document.getElementById('route-source');
+  if (!select) return;
+  const entries = Object.entries(BUILDINGS);
+  select.innerHTML = entries.map(([key, b]) =>
+    '<option value="' + esc(key) + '">' + esc(b.name) + '</option>'
+  ).join('');
+  if (routeSourceKey && BUILDINGS[routeSourceKey]) select.value = routeSourceKey;
+}
+
+function updateRouteStartUI() {
+  const currentBtn = document.getElementById('start-current-btn');
+  const buildingBtn = document.getElementById('start-building-btn');
+  const picker = document.getElementById('route-source-picker');
+  if (currentBtn) currentBtn.classList.toggle('active', routeMode === 'current');
+  if (buildingBtn) buildingBtn.classList.toggle('active', routeMode === 'building');
+  if (picker) picker.style.display = routeMode === 'building' ? 'block' : 'none';
+}
+
+function chooseRouteStart(mode) {
+  routeMode = mode;
+  if (mode === 'current') {
+    routeSourceKey = null;
+    startGPS();
+  } else {
+    populateRouteSources();
+    const select = document.getElementById('route-source');
+    if (!routeSourceKey && select) routeSourceKey = select.value;
+  }
+  updateRouteStartUI();
+}
+
+function setBuildingRouteSource(key) {
+  if (BUILDINGS[key]) routeSourceKey = key;
+  routeMode = 'building';
+  updateRouteStartUI();
+}
+
 function useMyLocation() {
   dismissGpsGate();
   startGPS();
@@ -1800,7 +1733,22 @@ async function selectSearchResult(key) {
   // GPS prompt appear when the user picks a destination.
   if (!gpsPos && navigator.geolocation) startGPS();
   if (!streamReady() && !await initCamera()) return;
-  setDestination(key);
+
+  // Search navigation is the new dynamic mode. The legacy QR link still
+  // enters through routeMode="gate" and keeps its original route.
+  if (routeMode === 'building' && (!routeSourceKey || routeSourceKey === key)) {
+    showToast('Choose a different starting building');
+    openSearch();
+    return;
+  }
+  if (routeMode === 'current' && !gpsPos) {
+    showToast('Waiting for your GPS position…');
+    startGPS();
+    openSearch();
+    return;
+  }
+
+  setDestination(key, {mode: routeMode, sourceKey: routeSourceKey});
   showToast('Navigating to ' + BUILDINGS[key].name);
 }
  
