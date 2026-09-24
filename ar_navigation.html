@@ -871,102 +871,37 @@ function blockPermissions() {
   }
 }
  
-// ================================================================
-// COMPASS / DEVICE ORIENTATION PERMISSION
-// ================================================================
-function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
-  const d2r = Math.PI / 180;
-  const x = betaDeg * d2r, y = gammaDeg * d2r, z = alphaDeg * d2r;
-  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
-  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
-  const vx = -cZ * sY - sZ * sX * cY;
-  const vy = -sZ * sY + cZ * sX * cY;
-  let h = Math.atan2(vx, vy);
-  return (h * 180 / Math.PI + 360) % 360;
-}
-
-function requestCompassPermission() {
-  try {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission().then(state => {
-        if (state === 'granted') installOrientationListener();
-        else console.warn('Device orientation permission:', state);
-      }).catch(err => console.warn('Device orientation permission failed:', err));
-    } else {
-      installOrientationListener();
-    }
-  } catch (err) {
-    console.warn('Device orientation permission request failed:', err);
-  }
-}
-
-function installOrientationListener() {
-  if (compassInstalled) return;
-  compassInstalled = true;
-  orientationListener = e => {
-    let h = null;
-    if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) {
-      h = e.webkitCompassHeading;
-    } else if (e.alpha != null && e.beta != null && e.gamma != null) {
-      h = tiltCompassHeading(e.alpha, e.beta, e.gamma);
-    }
-    if (h == null || !isFinite(h)) return;
-
-    if (rawHeading >= 0) heading += normalizeAngle(h - heading) * 0.35;
-    else heading = h;
-    heading = (heading + 360) % 360;
-    rawHeading = h;
-
-    if (e.beta != null && isFinite(e.beta)) {
-      const angle = (screen.orientation && Number.isFinite(screen.orientation.angle))
-        ? screen.orientation.angle : (window.orientation || 0);
-      let pitch = Math.abs(angle) === 90 ? (e.gamma || 0) : 90 - e.beta;
-      pitch = Math.max(-80, Math.min(80, pitch));
-      cameraPitch = rawPitch == null ? pitch : rawPitch + (pitch - rawPitch) * 0.25;
-      rawPitch = pitch;
-    }
-
-    const needle = document.getElementById('compass-needle');
-    if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
-    if (gpsPos && dest && typeof updateArrowRotation === 'function') updateArrowRotation();
-  };
-  window.addEventListener('deviceorientation', orientationListener, true);
-}
-
 async function allowPermissions() {
   const hint = document.getElementById('gate-hint');
-  if (hint) hint.textContent = 'Please allow Camera and Location. AR will open as soon as the camera is ready.';
-
-  // Request compass permission directly from the user's tap on iOS.
-  // Compass is optional: failure here must never block camera/GPS AR.
-  requestCompassPermission();
-
-  // Start GPS immediately from the same tap. Do not depend on the Permissions
-  // API because some mobile/embedded browsers report it as unsupported.
+  if (hint) hint.textContent = 'Please allow the Camera and Location prompts your browser shows.';
+ 
+  // 1) Ask for location SYNCHRONOUSLY inside this tap. iOS/Android hide the
+  //    permission dialog if geolocation is requested after the async camera
+  //    setup, so the GPS prompt must happen before the await below.
   startGPS();
-
-  // Camera is the hard requirement for the AR camera view.
+ 
+  // 1b) Ask for the compass (device orientation) in the same tap so the
+  //    navigation arrow can rotate on iOS too.
+  requestCompassPermission();
+ 
+  // 2) Camera permission (the dialog queues behind the location one on iOS).
   const camOK = await initCamera();
-
-  // Update the indicators when the browser supports Permissions API, but do not
-  // treat "unsupported" as a denial.
+ 
+  // Show what actually happened after the browser prompts appear.
   const cam = await queryPerm('camera');
   const loc = await queryPerm('geolocation');
-  setPermStatus('perm-camera', cam === 'unsupported' ? (camOK ? 'granted' : 'denied') : cam);
-  setPermStatus('perm-location', loc === 'unsupported' ? (gpsPos ? 'granted' : 'prompt') : loc);
-
-  // IMPORTANT: open AR as soon as camera access succeeds. GPS may take a few
-  // seconds to get its first fix, so it must not hold the user on the gate.
-  if (camOK) {
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+ 
+  if (camOK && loc === 'granted') {
+    // Everything allowed — open AR navigation automatically.
     enterFromGate();
-    if (!gpsPos) showToast('AR started — waiting for GPS location…');
     return;
   }
-
-  showGateFailure(false, loc);
+ 
+  showGateFailure(camOK, loc);
 }
-
+ 
 async function initCamera() {
   const loading = document.getElementById('loading');
   const noCam = document.getElementById('no-cam');
