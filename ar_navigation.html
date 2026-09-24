@@ -96,7 +96,23 @@
   .gps-dot{display:none;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.45);flex-shrink:0}
   .gps-dot.show{display:block}
   .gps-dot.on{background:var(--gold);box-shadow:0 0 0 3px rgba(255,207,31,.3)}
+  .heading-calibrate{position:absolute;left:50%;bottom:calc(var(--safe-b) + 178px);transform:translateX(-50%);z-index:24;display:none;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:0;border-radius:999px;background:rgba(0,34,74,.94);color:#fff;font:700 15px/1 var(--font-display);box-shadow:0 8px 24px rgba(0,12,36,.38),0 0 0 1px rgba(255,255,255,.16);white-space:nowrap}
+  .heading-calibrate.show{display:inline-flex}
+  .heading-calibrate.ready{background:var(--gold);color:var(--navy);box-shadow:0 8px 24px rgba(0,12,36,.32)}
+  .heading-calibrate svg{width:18px;height:18px;flex:0 0 auto}
+  @media (max-height:700px){.heading-calibrate{bottom:calc(var(--safe-b) + 160px)}}
  
+  /* ── Live campus mini-map ── */
+  .mini-map-wrap{position:absolute;top:calc(var(--safe-t) + 104px);right:12px;z-index:23;width:178px;pointer-events:none;}
+  .mini-map{position:relative;width:178px;height:178px;border-radius:20px;background:rgba(248,251,255,.96);box-shadow:0 12px 30px rgba(0,12,36,.42),0 0 0 1px rgba(255,255,255,.75);overflow:hidden;}
+  #mini-map-canvas{display:block;width:100%;height:100%;}
+  .mini-map-head{position:absolute;left:10px;top:9px;padding:5px 8px;border-radius:999px;background:rgba(0,34,74,.94);color:#fff;font:700 12px/1 var(--font-display);letter-spacing:.3px;box-shadow:0 2px 8px rgba(0,12,36,.2);}
+  .mini-map-status{position:absolute;right:10px;top:9px;padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--navy);font:600 11px/1 var(--font-display);box-shadow:0 1px 6px rgba(0,12,36,.12);}
+  .mini-map-legend{position:absolute;left:10px;bottom:9px;display:flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.9);color:var(--mist);font:600 10px/1 var(--font-display);box-shadow:0 1px 6px rgba(0,12,36,.12);}
+  .mini-map-legend i{display:block;width:15px;height:4px;border-radius:4px;background:var(--blue-2);}
+  .mini-map-wrap.hidden{display:none;}
+  @media (max-width:380px){.mini-map-wrap{right:9px;width:156px}.mini-map{width:156px;height:156px}}
+
   /* ── Instruction plate (top) ── */
   .nav-top{position:absolute;top:0;left:0;right:0;z-index:22;padding:calc(var(--safe-t) + 58px) 12px 0;transform:translateY(-140%);transition:transform .5s var(--ease);pointer-events:none}
   .nav-top.show{transform:translateY(0)}
@@ -140,7 +156,6 @@
  
   .compass{position:absolute;right:14px;top:-62px;width:48px;height:48px;border-radius:50%;background:var(--navy);display:none;place-items:center;box-shadow:0 6px 18px rgba(0,12,36,.4),0 0 0 2px rgba(255,255,255,.16)}
   .compass.show{display:grid}
-  .compass-needle{width:26px;height:26px;transition:transform .15s linear}
  
   /* ── No camera ── */
   .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--navy);color:#fff;padding:32px;text-align:center}
@@ -266,6 +281,8 @@
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
     .boot-line{stroke-dashoffset:0}
   }
+  /* GPS-only navigation: the arrow no longer uses the device compass. */
+  #compass{display:none!important}
 </style>
 </head>
 <body>
@@ -344,6 +361,13 @@
     <canvas id="ar-canvas"></canvas>
   </div>
  
+  <button class="heading-calibrate" id="heading-calibrate" onclick="calibrateCameraHeading()" aria-label="Calibrate camera direction">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path><circle cx="12" cy="12" r="2.2"></circle>
+    </svg>
+    <span id="heading-calibrate-text">Set phone forward</span>
+  </button>
+ 
   <!-- No camera -->
   <div class="no-cam" id="no-cam" style="display:none">
     <div class="no-cam-icon">
@@ -371,6 +395,16 @@
     </button>
   </div>
  
+  <!-- Live campus mini-map -->
+  <div class="mini-map-wrap hidden" id="mini-map-wrap" aria-label="Live campus map">
+    <div class="mini-map" id="mini-map">
+      <canvas id="mini-map-canvas"></canvas>
+      <span class="mini-map-head">CAMPUS MAP</span>
+      <span class="mini-map-status" id="mini-map-status">GPS</span>
+      <span class="mini-map-legend"><i></i><span>Route</span></span>
+    </div>
+  </div>
+
   <!-- Instruction plate (top) -->
   <div class="nav-top" id="nav-top">
     <div class="plate" id="plate">
@@ -385,12 +419,6 @@
   <!-- Route sheet (bottom) -->
   <div class="nav-bottom" id="nav-bottom">
     <div class="sheet" id="sheet">
-      <div class="compass" id="compass" aria-label="Compass">
-        <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle" aria-hidden="true">
-          <polygon points="14,2 19,14 14,11.5 9,14" fill="#ff5a64"/>
-          <polygon points="14,26 9,14 14,16.5 19,14" fill="#ffffff"/>
-        </svg>
-      </div>
       <button class="sheet-grip" id="sheet-grip" onclick="toggleSheet()" aria-expanded="false" aria-controls="sheet-more" aria-label="Show route details"></button>
       <div class="sheet-head">
         <div class="sheet-title">
@@ -624,6 +652,32 @@ const BUILDINGS = {
     ],
     aliases:['dorm','dormitory','faculty','housing','lodging'] }
 };
+
+/* ================================================================
+   LOCAL X/Y COORDINATES FOR ALL BUILDINGS + WAYPOINTS
+   ---------------------------------------------------------------
+   The yellow entrance/start point (graph node S) is the local origin.
+   Every building and every turn waypoint gets a permanent {x,y} in metres.
+   Latitude/longitude are intentionally preserved for browser GPS and display.
+   ================================================================ */
+function attachLocalCoordinatesToBuildings() {
+  for (const [key, building] of Object.entries(BUILDINGS)) {
+    if (Number.isFinite(building.lat) && Number.isFinite(building.lng)) {
+      building.local = geoToLocalMeters(building);
+    }
+
+    if (Array.isArray(building.waypoints)) {
+      building.waypoints.forEach((wp) => {
+        if (Number.isFinite(wp.lat) && Number.isFinite(wp.lng)) {
+          wp.local = geoToLocalMeters(wp);
+        }
+      });
+    }
+  }
+}
+
+// The conversion helpers are declared later in the file, but function declarations
+// are hoisted. The call runs after BUILDINGS has been created.
  
 // Short signage codes shown on the destination tiles (also searchable)
 const BUILDING_CODES = {
@@ -653,17 +707,35 @@ let routeSourceKey = null;
 let activeRouteWaypoints = null;
 let activeRouteSteps = null;
 let activeRouteStart = null;
-let gpsPos = null;        // {lat, lng, acc, alt, altAcc}
-let heading = 0;          // smoothed compass heading degrees
-let rawHeading = -1;      // last raw compass reading (for smoothing)
-let cameraPitch = 0;      // camera optical-axis pitch relative to the horizon
-let rawPitch = null;
+let activeRouteGeometry = null;
+let gpsPos = null;        // filtered navigation fix
+let rawGpsPos = null;     // latest browser GPS fix
+let routeMatchedPos = null;
+let gpsHistory = [];
+const MAX_GPS_HISTORY = 12;
+let heading = 0;          // filtered GPS movement heading in geographic degrees
+let headingValid = false; // true once GPS has established a reliable travel direction
+let courseSamples = 0;
+let lastCourseTime = 0;
+let calibrationNoticeShown = false;
+let courseBuffer = [];
+const MAX_COURSE_BUFFER = 8;
+
+let cameraHeading = 0;
+let cameraHeadingValid = false;
+let manualCalibrationDone = false;
+let motionInstalled = false;
+let motionPermissionGranted = false;
+let lastMotionTime = 0;
+let motionYawSamples = 0;
+let fallbackAlpha = null;
+let lastGpsCorrectionTime = 0;
+
 let bearing = 0;          // bearing to ACTIVE waypoint degrees
 let distToDest = 0;       // metres to final destination
 let distToTarget = 0;     // metres to ACTIVE waypoint
 let verticalAngle = 0;    // elevation angle to ACTIVE waypoint
 let targetAltitude = null;
-let elevationRequestId = 0;
 let userSpeed = 1.4;      // walking speed m/s estimate
 let lastGpsTime = 0;
 let lastGpsDist = 0;
@@ -671,8 +743,6 @@ let gpsWatchId = null;
 let gpsRetries = 0;       // consecutive GPS failures before retry
 let gpsAsked = false;     // true once location permission has been requested
 const GPS_MAX_RETRIES = 6;
-let orientationListener = null;
-let compassInstalled = false;  // true once the orientation listener is attached
 let arrived = false;
  
 // Voice guide (text-to-speech step announcements)
@@ -732,6 +802,10 @@ window.addEventListener('load', async () => {
   // Show the camera / location permission state up front so users know whether
   // the browser will ask, already allowed it, or has it blocked.
   checkPermissionStates();
+
+  // If motion permission is already granted, install the gyro listener quietly.
+  // Otherwise it is installed from allowPermissions() via the user tap.
+  try { installMotionSensors(); } catch (e) {}
 });
  
 function tryAutoGPS(showPrompt) {
@@ -871,37 +945,348 @@ function blockPermissions() {
   }
 }
  
+
+/* ================================================================
+   CALIBRATED CSU APARRI WALKWAY GRAPH
+   Uses the user's blue-path / red-intersection campus map.
+   ================================================================ */
+const CAMPUS_GRAPH_PX = {"S": [820.7388392857143, 1349.408482142857], "0": [618.7142857142857, 447.5289575289575], "1": [823.3825757575758, 452.1098484848485], "2": [923.5358490566038, 452.1245283018868], "3": [983.6934865900383, 452.1647509578543], "4": [1017.9622641509434, 460.5056603773585], "5": [611.3825757575758, 584.8901515151515], "6": [611.3754789272031, 651.7164750957854], "7": [609.5568181818181, 787.9015151515151], "8": [823.3908045977012, 798.7126436781609], "9": [611.4075471698113, 921.0867924528309], "10": [823.4431818181819, 924.0984848484849], "11": [823.2260536398468, 951.567049808429], "12": [851.3825757575758, 952.1098484848485], "13": [932.3498098859316, 959.8745247148289], "14": [822.7104247104247, 1029.4247104247104], "15": [932.3498098859316, 1032.1254752851712]};
+const CAMPUS_GRAPH_EDGES = [["S", "14"], ["14", "11"], ["11", "10"], ["10", "8"], ["8", "1"], ["1", "0"], ["0", "5"], ["5", "6"], ["6", "7"], ["7", "9"], ["9", "10"], ["1", "2"], ["2", "3"], ["3", "4"], ["11", "12"], ["12", "13"], ["13", "15"], ["15", "14"]];
+const MAP_X0 = 823.3908045977012;
+const MAP_Y0 = 798.7126436781609;
+const MAP_LAT0 = 18.351735368388443;
+const MAP_LNG0 = 121.64992893110352;
+const MAP_SX = 5.559201587801684e-06;
+const MAP_SY = -2.1728520390933182e-06;
+
+function mapPxToLatLng(x,y){return [MAP_LAT0+(y-MAP_Y0)*MAP_SY,MAP_LNG0+(x-MAP_X0)*MAP_SX];}
+const CAMPUS_GRAPH=Object.fromEntries(Object.entries(CAMPUS_GRAPH_PX).map(([id,p])=>[id,{id,px:p,latlng:mapPxToLatLng(p[0],p[1])}]));
+
+/* ================================================================
+   LOCAL CAMPUS COORDINATES — metres
+   Origin is the yellow entrance node S.
+   X = metres east (+) / west (-)
+   Y = metres north (+) / south (-)
+   These are the coordinates used for route matching and graph distance.
+   ================================================================ */
+const CAMPUS_LOCAL_ORIGIN = {
+  lat: CAMPUS_GRAPH.S.latlng[0],
+  lng: CAMPUS_GRAPH.S.latlng[1]
+};
+const LOCAL_EARTH_RADIUS = 6378137;
+const LOCAL_ORIGIN_RAD = CAMPUS_LOCAL_ORIGIN.lat * Math.PI / 180;
+const LOCAL_COS_LAT = Math.cos(LOCAL_ORIGIN_RAD);
+
+function geoToLocalMeters(point) {
+  const lat = Number(point.lat);
+  const lng = Number(point.lng);
+  return {
+    x: (lng - CAMPUS_LOCAL_ORIGIN.lng) * Math.PI / 180 * LOCAL_EARTH_RADIUS * LOCAL_COS_LAT,
+    y: (lat - CAMPUS_LOCAL_ORIGIN.lat) * Math.PI / 180 * LOCAL_EARTH_RADIUS
+  };
+}
+
+function localMetersToGeo(x, y) {
+  return {
+    lat: CAMPUS_LOCAL_ORIGIN.lat + (y / LOCAL_EARTH_RADIUS) * 180 / Math.PI,
+    lng: CAMPUS_LOCAL_ORIGIN.lng + (x / (LOCAL_EARTH_RADIUS * LOCAL_COS_LAT)) * 180 / Math.PI
+  };
+}
+
+// Attach a local coordinate to every building and waypoint once.
+// This removes repeated conversions during live navigation.
+attachLocalCoordinatesToBuildings();
+
+function localDistance(a, b) {
+  const pa = a.local || (a.local = geoToLocalMeters(a));
+  const pb = b.local || (b.local = geoToLocalMeters(b));
+  return Math.hypot(pb.x - pa.x, pb.y - pa.y);
+}
+
+function localBearing(a, b) {
+  const pa = a.local || (a.local = geoToLocalMeters(a));
+  const pb = b.local || (b.local = geoToLocalMeters(b));
+  return (Math.atan2(pb.x - pa.x, pb.y - pa.y) * 180 / Math.PI + 360) % 360;
+}
+
+Object.values(CAMPUS_GRAPH).forEach(node => {
+  node.local = geoToLocalMeters({lat:node.latlng[0],lng:node.latlng[1]});
+});
+
+const GRAPH_ADJ=Object.fromEntries(Object.keys(CAMPUS_GRAPH).map(k=>[k,[]]));
+function graphDistance(a,b){return localDistance(CAMPUS_GRAPH[a],CAMPUS_GRAPH[b]);}
+CAMPUS_GRAPH_EDGES.forEach(([a,b])=>{const w=graphDistance(a,b);GRAPH_ADJ[a].push([b,w]);GRAPH_ADJ[b].push([a,w]);});
+function nearestGraphNode(lat,lng){
+  const here=geoToLocalMeters({lat,lng});
+  let best=null,bestD=Infinity;
+  for(const id of Object.keys(CAMPUS_GRAPH)){
+    const p=CAMPUS_GRAPH[id].local;
+    const d=Math.hypot(here.x-p.x,here.y-p.y);
+    if(d<bestD){bestD=d;best=id;}
+  }
+  return {id:best,d:bestD};
+}
+
+function localGraphSummary() {
+  return Object.fromEntries(Object.entries(CAMPUS_GRAPH).map(([id,node])=>[id,{x:+node.local.x.toFixed(2),y:+node.local.y.toFixed(2)}]));
+}
+
+function buildingLocalSummary(key) {
+  const b = BUILDINGS[key];
+  if (!b) return null;
+  return {
+    name: b.name,
+    local: b.local ? {x:+b.local.x.toFixed(2), y:+b.local.y.toFixed(2)} : null,
+    waypoints: (b.waypoints || []).map(w => ({
+      label: w.label || '',
+      x: +(w.local?.x ?? 0).toFixed(2),
+      y: +(w.local?.y ?? 0).toFixed(2)
+    }))
+  };
+}
+function shortestGraphPath(startId,endId){if(!startId||!endId)return[];const ids=Object.keys(CAMPUS_GRAPH),dist=Object.fromEntries(ids.map(k=>[k,Infinity])),prev=Object.fromEntries(ids.map(k=>[k,null])),used=new Set();dist[startId]=0;while(used.size<ids.length){let u=null,best=Infinity;for(const id of ids){if(!used.has(id)&&dist[id]<best){best=dist[id];u=id;}}if(u===null)break;used.add(u);if(u===endId)break;for(const [v,w] of GRAPH_ADJ[u]){const nd=dist[u]+w;if(nd<dist[v]){dist[v]=nd;prev[v]=u;}}}if(!Number.isFinite(dist[endId]))return[];const path=[];let cur=endId;while(cur){path.unshift(cur);cur=prev[cur];}return path;}
+function turnLabel(prev,curr,next){const ib=localBearing(prev,curr),ob=localBearing(curr,next),d=normalizeAngle(ob-ib),a=Math.abs(d);if(a<18)return'Continue straight';if(a<55)return d<0?'Bear left':'Bear right';if(a<135)return d<0?'Turn left':'Turn right';return d<0?'Turn sharply left':'Turn sharply right';}
+function buildCalibratedCampusRoute(key){
+  const b=BUILDINGS[key];
+  if(!b) return false;
+
+  let source=null,sourceName='';
+  if(routeMode==='current'){
+    if(!gpsPos){showToast('Waiting for your GPS position…');startGPS();return false;}
+    source={lat:gpsPos.lat,lng:gpsPos.lng,local:{...gpsPos.local},alt:Number.isFinite(gpsPos.alt)?gpsPos.alt:null};
+    sourceName='Your current location';
+  }else if(routeMode==='building'){
+    const sb=BUILDINGS[routeSourceKey];
+    if(!sb||routeSourceKey===key){
+      showToast(routeSourceKey===key?'Choose a different starting building':'Choose a starting building');
+      return false;
+    }
+    source={lat:sb.lat,lng:sb.lng,local:{...sb.local},alt:Number.isFinite(sb.alt)?sb.alt:null};
+    sourceName=sb.name;
+  }else{
+    source={lat:CAMPUS_GRAPH.S.latlng[0],lng:CAMPUS_GRAPH.S.latlng[1],local:{...CAMPUS_GRAPH.S.local},alt:null};
+    sourceName='Main campus entrance';
+  }
+
+  /*
+   * The user's campus data has two kinds of route information:
+   * 1) the calibrated blue-path/intersection graph; and
+   * 2) building-specific turn waypoints.
+   * Use both rather than forcing every building onto the graph.
+   */
+  const savedWaypoints=Array.isArray(b.waypoints)?b.waypoints:[];
+  const destinationDistanceToGraph=nearestGraphNode(b.lat,b.lng).d;
+  const sourceDistanceToGraph=nearestGraphNode(source.lat,source.lng).d;
+  const GRAPH_MAX_ACCESS=55;
+  const useGraph=destinationDistanceToGraph<=GRAPH_MAX_ACCESS || savedWaypoints.length>0;
+
+  let geometry=[source];
+  let waypointObjects=[];
+
+  if(useGraph){
+    const firstPoint=savedWaypoints.length?savedWaypoints[0]:{lat:b.lat,lng:b.lng};
+    const startNode=nearestGraphNode(source.lat,source.lng);
+    const firstNode=nearestGraphNode(firstPoint.lat,firstPoint.lng);
+    const ids=shortestGraphPath(startNode.id,firstNode.id);
+
+    if(ids.length){
+      for(const id of ids){
+        const p=CAMPUS_GRAPH[id].latlng;
+        const last=geometry[geometry.length-1];
+        if(haversine(last.lat,last.lng,p[0],p[1])>1.5){
+          geometry.push({lat:p[0],lng:p[1],local:{...CAMPUS_GRAPH[id].local},graphId:id});
+        }
+      }
+    }
+  }
+
+  // Append the building-specific saved waypoints. These are the user's
+  // actual turn coordinates and are more authoritative than a generic graph
+  // when the graph does not reach the building.
+  for(const wp of savedWaypoints){
+    const last=geometry[geometry.length-1];
+    if(haversine(last.lat,last.lng,wp.lat,wp.lng)>1.5){
+      waypointObjects.push({lat:wp.lat,lng:wp.lng,local:{...wp.local},label:wp.label||'Continue'});
+      geometry.push({lat:wp.lat,lng:wp.lng,local:{...wp.local},graphId:'WP'});
+    } else {
+      waypointObjects.push({lat:wp.lat,lng:wp.lng,local:{...wp.local},label:wp.label||'Continue'});
+    }
+  }
+
+  // If there were no building-specific waypoints, use the calibrated graph
+  // all the way to the closest graph access node when the destination is near
+  // the mapped campus route. Otherwise use the destination itself as the last
+  // approach point.
+  if(!savedWaypoints.length && destinationDistanceToGraph<=GRAPH_MAX_ACCESS){
+    const endNode=nearestGraphNode(b.lat,b.lng);
+    const startNode=nearestGraphNode(geometry[geometry.length-1].lat,geometry[geometry.length-1].lng);
+    const ids=shortestGraphPath(startNode.id,endNode.id);
+    for(const id of ids){
+      const p=CAMPUS_GRAPH[id].latlng;
+      const last=geometry[geometry.length-1];
+      if(haversine(last.lat,last.lng,p[0],p[1])>1.5) geometry.push({lat:p[0],lng:p[1],local:{...CAMPUS_GRAPH[id].local},graphId:id});
+    }
+  }
+
+  const last=geometry[geometry.length-1];
+  if(haversine(last.lat,last.lng,b.lat,b.lng)>1.5){
+    geometry.push({lat:b.lat,lng:b.lng,local:{...b.local},graphId:'DEST'});
+  }
+
+  // Rebuild waypoint list from the actual geometry, but preserve labels where
+  // the user supplied them.
+  const labeled=[];
+  const savedLabelMap=savedWaypoints.map(w=>({lat:w.lat,lng:w.lng,local:{...w.local},label:w.label||'Continue'}));
+  for(let i=1;i<geometry.length-1;i++){
+    const curr=geometry[i];
+    let label=null;
+    let best=Infinity;
+    for(const sw of savedLabelMap){
+      const d=haversine(curr.lat,curr.lng,sw.lat,sw.lng);
+      if(d<best && d<8){best=d;label=sw.label;}
+    }
+    if(!label && i+1<geometry.length){
+      label=turnLabel(geometry[i-1],geometry[i],geometry[i+1]);
+    }
+    if(label) labeled.push({lat:curr.lat,lng:curr.lng,label});
+  }
+
+  // De-duplicate turn points so a graph node and saved waypoint at the same
+  // intersection do not create two navigation steps.
+  waypointObjects=[];
+  for(const w of labeled){
+    const last=waypointObjects[waypointObjects.length-1];
+    if(!last || haversine(last.lat,last.lng,w.lat,w.lng)>3){
+      if (!w.local) w.local = geoToLocalMeters(w);
+      waypointObjects.push(w);
+    }
+  }
+
+  activeRouteStart=source;
+  activeRouteGeometry=geometry;
+  activeRouteWaypoints=waypointObjects;
+  activeRouteSteps=['Start from '+sourceName];
+  waypointObjects.forEach(w=>activeRouteSteps.push(w.label));
+  activeRouteSteps.push('You have arrived at '+b.name);
+
+  // Surface why the route is using the hybrid mode in the details/debug UI.
+  if(sourceDistanceToGraph>GRAPH_MAX_ACCESS && routeMode!=='gate'){
+    console.info('Route starts outside the calibrated campus graph; using GPS + saved building waypoints.', sourceDistanceToGraph);
+  }
+
+  refreshMiniMap();
+  return true;
+}
+
+// ================================================================
+// GPS-ONLY DIRECTION
+// ================================================================
+// The AR arrow does not use deviceorientation or the magnetic compass.
+// Direction is derived from the user's actual GPS movement instead.
+// This is more stable for a campus walking route, but the user must walk
+// a few metres with the phone facing roughly in the walking direction.
+
+async function requestMotionPermission() {
+  // Gyroscope/motion permission is requested from the same user tap.
+  // This is intentionally NOT a compass request.
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function') {
+      const state = await DeviceMotionEvent.requestPermission();
+      motionPermissionGranted = state === 'granted';
+    } else {
+      motionPermissionGranted = true;
+    }
+  } catch (e) {
+    motionPermissionGranted = false;
+  }
+
+  installMotionSensors();
+}
+
+function installMotionSensors() {
+  if (motionInstalled) return;
+  if (typeof window === 'undefined') return;
+
+  const isIOSWebKit = /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
+                      /WebKit/i.test(navigator.userAgent || '') &&
+                      !/CriOS|FxiOS/i.test(navigator.userAgent || '');
+
+  const onMotion = e => {
+    if (!cameraHeadingValid) return;
+
+    const rr = e && e.rotationRate;
+    const now = performance.now();
+    if (!rr) return;
+
+    /*
+     * IMPORTANT:
+     * In the current DeviceMotion model, rotationRate.gamma is the
+     * screen-normal / twist axis. That is the yaw axis we need.
+     * Some older WebKit implementations expose the equivalent value
+     * differently, so iOS Safari gets a narrowly scoped alpha fallback.
+     */
+    let rate = Number.isFinite(rr.gamma) ? rr.gamma : null;
+    if (rate === null && isIOSWebKit && Number.isFinite(rr.alpha)) {
+      rate = rr.alpha;
+    }
+    if (!Number.isFinite(rate)) return;
+
+    if (!lastMotionTime) {
+      lastMotionTime = now;
+      return;
+    }
+
+    const dt = (now - lastMotionTime) / 1000;
+    lastMotionTime = now;
+
+    if (dt <= 0 || dt > 0.12) return;
+
+    rate = Math.max(-360, Math.min(360, rate));
+    if (Math.abs(rate) < 0.08) return;
+
+    /*
+     * Positive device twist is opposite our geographic heading sign,
+     * therefore subtract the integrated yaw from the calibrated heading.
+     */
+    const delta = -rate * dt;
+    if (Math.abs(delta) > 12) return;
+
+    cameraHeading = (cameraHeading + delta + 360) % 360;
+    motionYawSamples++;
+    updateArrowRotation();
+  };
+
+  window.addEventListener('devicemotion', onMotion, true);
+  motionInstalled = true;
+}
+
 async function allowPermissions() {
   const hint = document.getElementById('gate-hint');
-  if (hint) hint.textContent = 'Please allow the Camera and Location prompts your browser shows.';
- 
-  // 1) Ask for location SYNCHRONOUSLY inside this tap. iOS/Android hide the
-  //    permission dialog if geolocation is requested after the async camera
-  //    setup, so the GPS prompt must happen before the await below.
+  if (hint) hint.textContent = 'Please allow Camera and Location. AR will open as soon as the camera is ready.';
+
+  // Request motion sensors from the user gesture. No compass UI or magnetic
+  // heading is used by navigation.
+  await requestMotionPermission();
+
   startGPS();
- 
-  // 1b) Ask for the compass (device orientation) in the same tap so the
-  //    navigation arrow can rotate on iOS too.
-  requestCompassPermission();
- 
-  // 2) Camera permission (the dialog queues behind the location one on iOS).
+
   const camOK = await initCamera();
- 
-  // Show what actually happened after the browser prompts appear.
+
   const cam = await queryPerm('camera');
   const loc = await queryPerm('geolocation');
-  setPermStatus('perm-camera', cam);
-  setPermStatus('perm-location', loc);
- 
-  if (camOK && loc === 'granted') {
-    // Everything allowed — open AR navigation automatically.
+  setPermStatus('perm-camera', cam === 'unsupported' ? (camOK ? 'granted' : 'denied') : cam);
+  setPermStatus('perm-location', loc === 'unsupported' ? (gpsPos ? 'granted' : 'prompt') : loc);
+
+  if (camOK) {
     enterFromGate();
+    if (!gpsPos) showToast('AR started — waiting for GPS location…');
     return;
   }
- 
-  showGateFailure(camOK, loc);
+
+  showGateFailure(false, loc);
 }
- 
+
 async function initCamera() {
   const loading = document.getElementById('loading');
   const noCam = document.getElementById('no-cam');
@@ -1010,68 +1395,245 @@ function startGPS() {
   );
 }
  
+function weightedGpsFix(lat, lng, acc, now) {
+  const previous = gpsPos ? { ...gpsPos } : null;
+
+  // First fix: trust it, but never let an obviously useless point drive AR.
+  if (!previous) {
+    gpsHistory = [{ lat, lng, acc, time: now }];
+    return { lat, lng, acc };
+  }
+
+  const d = haversine(previous.lat, previous.lng, lat, lng);
+  const dt = Math.max((now - (previous.time || now)) / 1000, 0.1);
+
+  // Reject physically impossible jumps. Campus walking speed is kept below 6 m/s.
+  if (d > 35 && d / dt > 6.0) {
+    return {
+      lat: previous.lat,
+      lng: previous.lng,
+      acc: Math.max(previous.acc || 0, acc || 0),
+      rejected: true
+    };
+  }
+
+  // Accuracy-weighted exponential smoothing.
+  // Better fixes move the filtered point more; weak fixes move it less.
+  const trust = Math.max(0.12, Math.min(0.55, 18 / Math.max(acc, 4)));
+  const movementTrust = d >= 2 ? 0.08 : 0;
+  const alpha = Math.max(0.10, Math.min(0.62, trust + movementTrust));
+
+  const latOut = previous.lat + (lat - previous.lat) * alpha;
+  const lngOut = previous.lng + (lng - previous.lng) * alpha;
+
+  gpsHistory.push({ lat: latOut, lng: lngOut, acc, time: now });
+  while (gpsHistory.length > MAX_GPS_HISTORY) gpsHistory.shift();
+
+  return { lat: latOut, lng: lngOut, acc };
+}
+
 function onGpsCoords(c) {
   gpsRetries = 0;
+
   const now = Date.now();
-  const newLat = c.latitude;
-  const newLng = c.longitude;
-  const newAcc = Number.isFinite(c.accuracy) ? c.accuracy : 999;
- 
-  // Ignore impossible/clearly unusable fixes instead of letting them jump the
-  // route or falsely trigger a waypoint.
-  if (!Number.isFinite(newLat) || !Number.isFinite(newLng) ||
-      Math.abs(newLat) > 90 || Math.abs(newLng) > 180) return;
- 
-  if (gpsPos) {
-    const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
-    const dt = (now - lastGpsTime) / 1000;
-    if (dt > 0 && d > 2) {
-      const measured = d / dt;
-      if (measured >= 0.3 && measured <= 3.0) {
-        userSpeed = userSpeed * 0.75 + measured * 0.25;
+  const rawLat = Number(c.latitude);
+  const rawLng = Number(c.longitude);
+  const rawAcc = Number.isFinite(c.accuracy) ? c.accuracy : 999;
+  const suppliedHeading = Number.isFinite(c.heading) ? c.heading : null;
+  const suppliedSpeed = Number.isFinite(c.speed) && c.speed >= 0 ? c.speed : null;
+
+  if (!Number.isFinite(rawLat) || !Number.isFinite(rawLng) ||
+      Math.abs(rawLat) > 90 || Math.abs(rawLng) > 180) return;
+
+  rawGpsPos = {
+    lat: rawLat,
+    lng: rawLng,
+    acc: rawAcc,
+    time: now
+  };
+
+  const previous = gpsPos ? { ...gpsPos } : null;
+  const previousTime = lastGpsTime;
+
+  const filtered = weightedGpsFix(rawLat, rawLng, rawAcc, now);
+
+  // Do not let a rejected jump update course, speed, or route state.
+  const fixWasRejected = !!filtered.rejected;
+  const newLat = filtered.lat;
+  const newLng = filtered.lng;
+  const newAcc = rawAcc;
+
+  let movementHeading = null;
+
+  // Browser GPS course is preferred only when the device says it is moving.
+  if (!fixWasRejected &&
+      suppliedHeading !== null &&
+      suppliedSpeed !== null &&
+      suppliedSpeed >= 0.9 &&
+      newAcc <= 25) {
+    movementHeading = suppliedHeading;
+  }
+
+  // Otherwise calculate course from FILTERED positions separated by distance.
+  if (!fixWasRejected && gpsHistory.length >= 3) {
+    const newest = gpsHistory[gpsHistory.length - 1];
+    let anchor = null;
+
+    for (let i = gpsHistory.length - 2; i >= 0; i--) {
+      const pt = gpsHistory[i];
+      const d = haversine(pt.lat, pt.lng, newest.lat, newest.lng);
+      const dt = (newest.time - pt.time) / 1000;
+      if (dt >= 1.0 && d >= 2.5) {
+        anchor = pt;
+        break;
+      }
+    }
+
+    if (anchor) {
+      const d = haversine(anchor.lat, anchor.lng, newest.lat, newest.lng);
+      const dt = Math.max((newest.time - anchor.time) / 1000, 0.1);
+      const avgSpeed = d / dt;
+
+      if (d >= 2.5 && avgSpeed >= 0.35 && avgSpeed <= 4.5 && newAcc <= 30) {
+        movementHeading = calcBearing(anchor.lat, anchor.lng, newest.lat, newest.lng);
       }
     }
   }
- 
+
+  if (Number.isFinite(movementHeading)) {
+    if (!headingValid) {
+      heading = movementHeading;
+      headingValid = true;
+      courseSamples = 1;
+      lastCourseTime = now;
+      if (!manualCalibrationDone && dest) updateCalibrationButton(true);
+    } else {
+      const delta = normalizeAngle(movementHeading - heading);
+      // Do not allow a single GPS course spike to rotate the navigation 30–90°.
+      const limitedDelta = Math.max(-12, Math.min(12, delta));
+      heading = (heading + limitedDelta * 0.18 + 360) % 360;
+      courseSamples++;
+      lastCourseTime = now;
+
+      // Gentle drift correction only from good, repeated walking fixes.
+      if (manualCalibrationDone && cameraHeadingValid) {
+        const since = now - lastGpsCorrectionTime;
+        const moving = suppliedSpeed === null || suppliedSpeed >= 0.7;
+        if (newAcc <= 18 && moving && since > 2200 && courseSamples >= 4) {
+          const drift = normalizeAngle(heading - cameraHeading);
+          if (Math.abs(drift) < 22) {
+            cameraHeading = (cameraHeading + drift * 0.05 + 360) % 360;
+          }
+          lastGpsCorrectionTime = now;
+        }
+      }
+    }
+  }
+
+  // Speed estimation uses FILTERED motion, reducing GPS jitter.
+  if (previous && previousTime > 0 && !fixWasRejected) {
+    const d = haversine(previous.lat, previous.lng, newLat, newLng);
+    const dt = (now - previousTime) / 1000;
+    if (dt > 0 && d > 1.0) {
+      const measured = d / dt;
+      if (measured >= 0.25 && measured <= 3.5) {
+        userSpeed = userSpeed * 0.82 + measured * 0.18;
+      }
+    }
+  }
+
+  const gpsLocal = geoToLocalMeters({lat:newLat, lng:newLng});
+
   gpsPos = {
     lat: newLat,
     lng: newLng,
+    local: gpsLocal,
     acc: newAcc,
-    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? c.altitude : null,
-    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined && isFinite(c.altitudeAccuracy)) ? c.altitudeAccuracy : null
+    heading: movementHeading,
+    speed: suppliedSpeed,
+    alt: Number.isFinite(c.altitude) ? c.altitude : null,
+    altAcc: Number.isFinite(c.altitudeAccuracy) ? c.altitudeAccuracy : null,
+    time: now,
+    _previous: previous
   };
- 
+
+  // Match the filtered fix to the stored campus route when possible.
+  routeMatchedPos = matchPositionToRoute(gpsPos);
+  refreshMiniMap();
+
   const readout = document.getElementById('gps-readout');
   if (readout) {
     const altText = Number.isFinite(gpsPos.alt) ? gpsPos.alt.toFixed(1) + ' m' : '--';
+    const quality = newAcc <= 8 ? 'GOOD' : newAcc <= 15 ? 'OK' : newAcc <= 25 ? 'WEAK' : 'POOR';
     readout.innerHTML =
       '<span>LAT ' + gpsPos.lat.toFixed(6) + '</span>' +
       '<span>LNG ' + gpsPos.lng.toFixed(6) + '</span>' +
-      '<span>ALT ' + altText + '</span>';
+      '<span>X ' + gpsPos.local.x.toFixed(2) + 'm · Y ' + gpsPos.local.y.toFixed(2) + 'm</span>' +
+      '<span>ALT ' + altText + '</span>' +
+      '<span>GPS ±' + Math.round(newAcc) + 'm · ' + quality + '</span>' +
+      '<span>MOVE ' + (headingValid ? Math.round(heading) + '°' : '--') + '</span>' +
+      '<span>VIEW ' + (cameraHeadingValid ? Math.round(cameraHeading) + '°' : '--') + '</span>';
   }
+
   lastGpsTime = now;
- 
+
   const dot = document.getElementById('gps-dot');
-  dot.classList.add('show', 'on');
- 
-  // A fix arrived — hide the permission gate and show the live accuracy.
+  if (dot) {
+    dot.classList.add('show');
+    if (newAcc <= 25 && !fixWasRejected) dot.classList.add('on');
+    else dot.classList.remove('on');
+  }
+
   dismissGpsGate();
   updateGpsDisplay();
- 
+
   if (!startDist && dest) {
-    startDist = haversine(newLat, newLng, BUILDINGS[dest].lat, BUILDINGS[dest].lng);
+    startDist = Math.hypot(gpsPos.local.x - BUILDINGS[dest].local.x, gpsPos.local.y - BUILDINGS[dest].local.y);
   }
- 
+
   if (dest) updateDistanceAndBearing();
- 
-  // Live re-sort of any open search results by real distance.
+
   const searchOverlay = document.getElementById('search-overlay');
   if (searchOverlay && !searchOverlay.classList.contains('hidden')) {
     const input = document.getElementById('search-input');
     renderSearchResults(input.value);
   }
 }
- 
+
+function updateCalibrationButton(show) {
+  const btn=document.getElementById('heading-calibrate');
+  const text=document.getElementById('heading-calibrate-text');
+  if (!btn) return;
+  if (!show || !dest) { btn.classList.remove('show'); return; }
+  btn.classList.add('show');
+  btn.classList.toggle('ready',manualCalibrationDone);
+  if (text) text.textContent=manualCalibrationDone?'Recalibrate direction':'Set phone forward';
+}
+
+function calibrateCameraHeading() {
+  if (!dest) return;
+  if (!headingValid || !Number.isFinite(heading)) {
+    showToast('Walk forward 3–5 m first so GPS can establish the travel direction.');
+    return;
+  }
+  cameraHeading=heading;
+  cameraHeadingValid=true;
+  manualCalibrationDone=true;
+  motionYawSamples=0;
+  lastMotionTime=0;
+  fallbackAlpha=null;
+  lastGpsCorrectionTime=Date.now();
+  arrowRotation=0; currentArrowRot=0;
+  updateCalibrationButton(true);
+  updateArrowRotation();
+  showToast('Direction set. Turn the phone normally; GPS will correct drift while walking.');
+}
+
+function updateDirectionCalibrationNotice() {
+  if (!dest || manualCalibrationDone) return;
+  updateCalibrationButton(headingValid);
+}
+
 function onGpsError(err) {
   console.warn('GPS error:', err && err.code, err && err.message);
   const dot = document.getElementById('gps-dot');
@@ -1108,12 +1670,60 @@ function stopGPS() {
  
 function updateArrowRotation() {
   if (!gpsPos || !dest) return;
-  const diff = normalizeAngle(bearing - heading);
-  arrowRotation = (diff * Math.PI) / 180;
+  if (!manualCalibrationDone || !cameraHeadingValid) { arrowRotation=0; return; }
+  const diff=normalizeAngle(bearing-cameraHeading);
+  arrowRotation=(Math.abs(diff)<2.5?0:diff)*Math.PI/180;
 }
- 
-// Each waypoint is a real WGS84 coordinate. The active target changes only after
-// the user's live GPS fix enters the waypoint's acceptance radius.
+
+function distancePointToSegmentMeters(p, a, b) {
+  const q = projectPointToSegment(p, a, b);
+  return q.distance;
+}
+
+function projectPointToSegment(p, a, b) {
+  const pp = geoToLocalMeters(p);
+  const aa = a.local || (a.local = geoToLocalMeters(a));
+  const bb = b.local || (b.local = geoToLocalMeters(b));
+
+  const bx = bb.x - aa.x;
+  const by = bb.y - aa.y;
+  const px = pp.x - aa.x;
+  const py = pp.y - aa.y;
+
+  const denom = bx * bx + by * by;
+  const t = denom > 0
+    ? Math.max(0, Math.min(1, (px * bx + py * by) / denom))
+    : 0;
+
+  const qx = aa.x + bx * t;
+  const qy = aa.y + by * t;
+  const distance = Math.hypot(pp.x - qx, pp.y - qy);
+  const geo = localMetersToGeo(qx, qy);
+
+  return {
+    t,
+    distance,
+    x: qx,
+    y: qy,
+    lat: geo.lat,
+    lng: geo.lng
+  };
+}
+
+function routeDistanceFromMatch(match, geometry) {
+  if (!geometry || geometry.length < 2 || !match) return 0;
+  let total = 0;
+  const first = Math.min(match.segmentIndex, geometry.length - 2);
+  const a = geometry[first];
+  const b = geometry[first + 1];
+  const currentSegmentLength = localDistance(a, b);
+  total += currentSegmentLength * (1 - match.t);
+  for (let i = first + 1; i < geometry.length - 1; i++) {
+    total += localDistance(geometry[i], geometry[i + 1]);
+  }
+  return Math.max(0, total);
+}
+
 function getRouteWaypoints() {
   if (Array.isArray(activeRouteWaypoints)) return activeRouteWaypoints;
   const b = BUILDINGS[dest];
@@ -1123,17 +1733,487 @@ function getRouteWaypoints() {
 function getRouteSteps() {
   if (Array.isArray(activeRouteSteps) && activeRouteSteps.length) return activeRouteSteps;
   const b = BUILDINGS[dest];
-  return b ? b.steps : [];
+  return b ? (b.steps || []) : [];
 }
 
-// The active target is always a real WGS84 coordinate. For dynamic routes,
-// the destination is the final target and there are no gate-only waypoints.
 function targetForStep() {
+  const geometry = getRouteGeometry();
+  if (geometry.length >= 2) {
+    // The active waypoint is deliberately one point ahead of the user's
+    // current matched position. This keeps the target on the calibrated path.
+    const wps = getRouteWaypoints();
+    if (stepIdx < wps.length) return wps[stepIdx];
+    const b = BUILDINGS[dest];
+    return b || geometry[geometry.length - 1];
+  }
   const b = BUILDINGS[dest];
-  if (!b) return null;
   const wps = getRouteWaypoints();
-  const idx = Math.min(stepIdx, wps.length);
-  return idx < wps.length ? wps[idx] : b;
+  if (stepIdx < wps.length) return wps[stepIdx];
+  return b || null;
+}
+
+function getRouteGeometry() {
+  if (Array.isArray(activeRouteGeometry) && activeRouteGeometry.length >= 2) return activeRouteGeometry;
+  if (!dest) return [];
+  const b=BUILDINGS[dest]; if(!b) return [];
+  const points=[];
+  if(routeMode==='building' && routeSourceKey && BUILDINGS[routeSourceKey]) {
+    points.push({lat:BUILDINGS[routeSourceKey].lat,lng:BUILDINGS[routeSourceKey].lng,local:{...BUILDINGS[routeSourceKey].local}});
+  } else if(routeMode==='current' && activeRouteStart) {
+    points.push({lat:activeRouteStart.lat,lng:activeRouteStart.lng,local:{...activeRouteStart.local}});
+  } else {
+    points.push({lat:CAMPUS_GRAPH.S.latlng[0],lng:CAMPUS_GRAPH.S.latlng[1],local:{...CAMPUS_GRAPH.S.local}});
+  }
+  getRouteWaypoints().forEach(w=>points.push({lat:w.lat,lng:w.lng,local:{...w.local}}));
+  points.push({lat:b.lat,lng:b.lng,local:{...b.local}});
+  const unique=[]; points.forEach(p=>{const last=unique[unique.length-1];if(!last||haversine(last.lat,last.lng,p.lat,p.lng)>1)unique.push(p);});
+  return unique;
+}
+
+function matchPositionToRoute(pos) {
+  const geometry = getRouteGeometry();
+  if (!pos || geometry.length < 2) return null;
+
+  // Starting from the active leg makes the matched point follow the actual
+  // route rather than jumping to a closer, but already-passed segment.
+  const firstSegment = Math.max(0, stepIdx - 1);
+  let best = null;
+
+  for (let i = firstSegment; i < geometry.length - 1; i++) {
+    const a = geometry[i];
+    const b = geometry[i + 1];
+    const projected = projectPointToSegment(pos, a, b);
+
+    // Avoid matching to segments that are very far away from the user.
+    const allowed = Math.max(18, (pos.acc || 10) * 1.35);
+    if (projected.distance <= allowed || !best) {
+      if (!best || projected.distance < best.distance) {
+        best = {
+          lat: projected.lat,
+          lng: projected.lng,
+          distance: projected.distance,
+          segmentIndex: i,
+          t: projected.t
+        };
+      }
+    }
+  }
+
+  return best;
+}
+
+function routeLookAheadTarget() {
+  const target = targetForStep();
+  const geometry = getRouteGeometry();
+  if (!gpsPos || !target || geometry.length < 2) return target;
+
+  const waypoints = getRouteWaypoints();
+  if (stepIdx === 0 && waypoints.length) return target;
+
+  const match = routeMatchedPos || matchPositionToRoute(gpsPos);
+  if (!match) return target;
+
+  const lookAheadMeters = distToTarget < 25 ? 7 : 14;
+  let remaining = lookAheadMeters;
+  let seg = Math.min(match.segmentIndex, geometry.length - 2);
+  let t = match.t;
+
+  while (seg < geometry.length - 1) {
+    const a = geometry[seg];
+    const b = geometry[seg + 1];
+    const aa = a.local || (a.local = geoToLocalMeters(a));
+    const bb = b.local || (b.local = geoToLocalMeters(b));
+    const segmentLength = Math.hypot(bb.x - aa.x, bb.y - aa.y);
+    const available = Math.max(0, (1 - t) * segmentLength);
+
+    if (remaining <= available) {
+      const extraT = segmentLength > 0 ? remaining / segmentLength : 0;
+      const f = t + extraT;
+      const xy = {
+        x: aa.x + (bb.x-aa.x) * f,
+        y: aa.y + (bb.y-aa.y) * f
+      };
+      return localMetersToGeo(xy.x, xy.y);
+    }
+
+    remaining -= available;
+    seg++;
+    t = 0;
+  }
+
+  return geometry[geometry.length - 1];
+}
+
+function hasPassedWaypoint(previous, current, waypoint, nextTarget) {
+  if (!previous || !current || !waypoint) return false;
+
+  const travelBearing = calcBearing(previous.lat, previous.lng, current.lat, current.lng);
+  const toWaypoint = calcBearing(current.lat, current.lng, waypoint.lat, waypoint.lng);
+  const angularDifference = Math.abs(normalizeAngle(toWaypoint - travelBearing));
+  const moved = haversine(previous.lat, previous.lng, current.lat, current.lng);
+
+  if (moved < 3) return false;
+  if (angularDifference < 70) return false;
+
+  if (nextTarget) {
+    const oldRemaining = haversine(previous.lat, previous.lng, nextTarget.lat, nextTarget.lng);
+    const newRemaining = haversine(current.lat, current.lng, nextTarget.lat, nextTarget.lng);
+    return newRemaining < oldRemaining;
+  }
+
+  return angularDifference > 95;
+}
+
+/* ================================================================
+   LIVE CAMPUS MINI-MAP
+   ---------------------------------------------------------------
+   The map is driven by the same local X/Y metre coordinates used by
+   navigation. It follows the user like a small Google-Maps-style
+   campus map: the blue dot is the live GPS position, the route is the
+   calibrated campus path, and the travelled part is dimmed as the user
+   progresses.
+   ================================================================ */
+function setMiniMapVisible(show) {
+  const wrap = document.getElementById('mini-map-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden', !show);
+}
+
+function miniMapCanvasSize() {
+  const canvas = document.getElementById('mini-map-canvas');
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(120, rect.width || 178);
+  const h = Math.max(120, rect.height || 178);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  return {canvas, w, h, dpr};
+}
+
+function miniMapWorldPoint(nodeOrPoint) {
+  if (!nodeOrPoint) return null;
+  if (nodeOrPoint.local && Number.isFinite(nodeOrPoint.local.x) && Number.isFinite(nodeOrPoint.local.y)) {
+    return {x: nodeOrPoint.local.x, y: nodeOrPoint.local.y};
+  }
+  if (Number.isFinite(nodeOrPoint.lat) && Number.isFinite(nodeOrPoint.lng)) {
+    return geoToLocalMeters(nodeOrPoint);
+  }
+  return null;
+}
+
+function drawMiniMap() {
+  const map = miniMapCanvasSize();
+  if (!map) return;
+  const {canvas, w, h, dpr} = map;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  // Clean map background.
+  ctx.fillStyle = '#f6f9fd';
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle map grid.
+  ctx.strokeStyle = 'rgba(0,61,130,.055)';
+  ctx.lineWidth = 1;
+  const grid = 26;
+  for (let x = 0; x <= w; x += grid) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  for (let y = 0; y <= h; y += grid) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  const route = getRouteGeometry();
+  const routePoints = Array.isArray(route) ? route.map(miniMapWorldPoint).filter(Boolean) : [];
+  const user = gpsPos ? miniMapWorldPoint(gpsPos) : null;
+  const destination = dest && BUILDINGS[dest] ? miniMapWorldPoint(BUILDINGS[dest]) : null;
+
+  // With no active route, still show the mapped campus pathways and live GPS.
+  const graphPoints = Object.values(CAMPUS_GRAPH).map(n => miniMapWorldPoint(n)).filter(Boolean);
+  const all = routePoints.concat(graphPoints);
+  if (user) all.push(user);
+  if (destination) all.push(destination);
+
+  if (!all.length) {
+    ctx.fillStyle = 'rgba(0,34,74,.72)';
+    ctx.font = '600 12px var(--font-body)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for GPS…', w/2, h/2 + 4);
+    return;
+  }
+
+  // Keep the user near the centre, while zooming enough to keep the route ahead visible.
+  const center = user || routePoints[0] || all[0];
+  let maxRadius = 35;
+  for (const p of all) {
+    maxRadius = Math.max(maxRadius, Math.hypot(p.x - center.x, p.y - center.y));
+  }
+  const usable = Math.min(w, h) * 0.40;
+  let scale = usable / maxRadius;
+  scale = Math.max(0.34, Math.min(2.7, scale));
+
+  const worldToScreen = (p) => ({
+    x: w/2 + (p.x - center.x) * scale,
+    y: h/2 - (p.y - center.y) * scale
+  });
+
+  // Draw all calibrated campus paths faintly underneath the active route.
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(78,111,148,.20)';
+  ctx.lineWidth = 3;
+  for (const [aId, bId] of CAMPUS_GRAPH_EDGES) {
+    const a = worldToScreen(CAMPUS_GRAPH[aId].local);
+    const b = worldToScreen(CAMPUS_GRAPH[bId].local);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Route line, with the travelled portion dimmed and the remaining route highlighted.
+  if (routePoints.length >= 2) {
+    const match = routeMatchedPos || (gpsPos ? matchPositionToRoute(gpsPos) : null);
+    const progressPoints = [];
+    const remainingPoints = [];
+
+    if (match && Number.isFinite(match.segmentIndex)) {
+      const seg = Math.max(0, Math.min(match.segmentIndex, routePoints.length - 2));
+      for (let i = 0; i <= seg; i++) progressPoints.push(routePoints[i]);
+      if (Number.isFinite(match.x) && Number.isFinite(match.y)) {
+        progressPoints.push({x:match.x,y:match.y});
+        remainingPoints.push({x:match.x,y:match.y});
+      }
+      for (let i = seg + 1; i < routePoints.length; i++) remainingPoints.push(routePoints[i]);
+    } else {
+      remainingPoints.push(...routePoints);
+    }
+
+    const drawPolyline = (points, stroke, width) => {
+      if (points.length < 2) return;
+      ctx.beginPath();
+      const first = worldToScreen(points[0]);
+      ctx.moveTo(first.x, first.y);
+      for (let i = 1; i < points.length; i++) {
+        const p = worldToScreen(points[i]);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    };
+
+    drawPolyline(progressPoints, 'rgba(91,109,136,.42)', 7);
+    drawPolyline(remainingPoints, '#1a5faf', 7);
+    drawPolyline(remainingPoints, 'rgba(255,255,255,.86)', 2.2);
+  }
+
+  // Turn/intersection nodes.
+  for (const node of Object.values(CAMPUS_GRAPH)) {
+    const p = worldToScreen(node.local);
+    if (p.x < -5 || p.x > w+5 || p.y < -5 || p.y > h+5) continue;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.7, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.7, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,61,130,.62)';
+    ctx.fill();
+  }
+
+  // Destination pin.
+  if (destination) {
+    const p = worldToScreen(destination);
+    ctx.save();
+    ctx.fillStyle = '#e34a4a';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y + 8);
+    ctx.bezierCurveTo(p.x - 8, p.y - 1, p.x - 7, p.y - 7, p.x, p.y - 7);
+    ctx.bezierCurveTo(p.x + 7, p.y - 7, p.x + 8, p.y - 1, p.x, p.y + 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(p.x, p.y - 2.4, 2.2, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Live GPS accuracy halo + blue location dot.
+  if (user) {
+    const p = worldToScreen(user);
+    const accuracyMeters = Number.isFinite(gpsPos?.acc) ? Math.min(45, Math.max(4, gpsPos.acc)) : 12;
+    const radius = Math.max(6, accuracyMeters * scale);
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(26,95,175,.13)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(26,95,175,.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.save();
+    if (headingValid && Number.isFinite(heading)) {
+      const a = -heading * Math.PI / 180;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0, -15);
+      ctx.lineTo(-6, 4);
+      ctx.lineTo(0, 1);
+      ctx.lineTo(6, 4);
+      ctx.closePath();
+      ctx.fillStyle = '#1a5faf';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7.2, 0, Math.PI*2);
+    ctx.fillStyle = '#1a5faf';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+  }
+
+  // Small north marker.
+  ctx.fillStyle = 'rgba(0,34,74,.72)';
+  ctx.font = '700 10px var(--font-display)';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', w - 15, h - 10);
+
+  const status = document.getElementById('mini-map-status');
+  if (status) {
+    if (!gpsPos) status.textContent = 'GPS…';
+    else if (gpsPos.acc <= 10) status.textContent = 'GPS • good';
+    else if (gpsPos.acc <= 25) status.textContent = 'GPS • OK';
+    else status.textContent = 'GPS • weak';
+  }
+}
+
+function refreshMiniMap() {
+  setMiniMapVisible(!!(gpsPos || dest));
+  requestAnimationFrame(drawMiniMap);
+}
+
+window.addEventListener('resize', () => requestAnimationFrame(drawMiniMap));
+
+function updateDistanceAndBearing() {
+  if (!gpsPos || !dest) return;
+
+  const building = BUILDINGS[dest];
+  if (!building) return;
+
+  const previous = gpsPos._previous || null;
+  const target = targetForStep();
+  if (!target) return;
+
+  const geometry = getRouteGeometry();
+  const match = routeMatchedPos || matchPositionToRoute(gpsPos);
+  if (match && geometry.length >= 2) {
+    distToDest = routeDistanceFromMatch(match, geometry);
+  } else {
+    distToDest = localDistance(gpsPos, building);
+  }
+  distToTarget = localDistance(gpsPos, target);
+
+  // Use the route-matched / look-ahead point to stabilize the geographic bearing.
+  const guidanceTarget = routeLookAheadTarget() || target;
+  const bearingOrigin = routeMatchedPos || gpsPos;
+  bearing = localBearing(bearingOrigin, guidanceTarget);
+
+  const targetAlt = getTargetAltitude(target);
+  if (Number.isFinite(targetAlt) && Number.isFinite(gpsPos.alt)) {
+    targetAltitude = targetAlt;
+    const horizontal = Math.max(1, distToTarget);
+    const rawAngle = Math.atan2(targetAlt - gpsPos.alt, horizontal);
+    verticalAngle = verticalAngle * 0.90 + rawAngle * 0.10;
+  } else {
+    targetAltitude = null;
+    verticalAngle = 0;
+  }
+
+  const accuracy = Number.isFinite(gpsPos.acc) ? gpsPos.acc : 12;
+  const waypoints = getRouteWaypoints();
+
+  if (stepIdx < waypoints.length) {
+    const wp = waypoints[stepIdx];
+    const next = stepIdx + 1 < waypoints.length ? waypoints[stepIdx + 1] : building;
+
+    const waypointRadius = Math.max(7, Math.min(16, accuracy * 0.55 + 3));
+    const nearWaypoint = distToTarget <= waypointRadius;
+
+    const corridorDistance = distancePointToSegmentMeters(gpsPos, wp, next);
+    const nearCorridor = corridorDistance <= Math.max(accuracy * 0.8, 7);
+    const passed = previous ? hasPassedWaypoint(previous, gpsPos, wp, next) : false;
+
+    if (nearWaypoint || (passed && nearCorridor)) {
+      stepIdx++;
+      routeMatchedPos = matchPositionToRoute(gpsPos);
+      updateDirectionForNewTarget();
+      refreshUI();
+      speak(legText(stepIdx));
+      return;
+    }
+  }
+
+  if (stepIdx >= waypoints.length) {
+    const arrivalRadius = Math.max(10, Math.min(20, accuracy * 0.65 + 5));
+
+    if (distToDest <= arrivalRadius) {
+      if (!arrived) {
+        arrived = true;
+        const arrival = document.getElementById('arrival');
+        const msg = document.getElementById('arrival-msg');
+        if (msg) msg.textContent = 'You have reached ' + building.name + '.';
+        resetFeedbackUI();
+        if (arrival) arrival.classList.add('show');
+        speak('You have arrived at ' + building.name);
+      }
+      return;
+    }
+  }
+
+  updateArrowRotation();
+
+  const distEl = document.getElementById('s-dist');
+  const timeEl = document.getElementById('s-time');
+  if (distEl) distEl.textContent = fmtDist(distToDest);
+  if (timeEl) {
+    timeEl.textContent = '~' + Math.max(1, Math.ceil(distToDest / Math.max(userSpeed, 0.6) / 60)) + ' min';
+  }
+
+  refreshUI();
+  refreshMiniMap();
+}
+
+function updateDirectionForNewTarget() {
+  const target = targetForStep();
+  if (!gpsPos || !target) return;
+
+  routeMatchedPos = matchPositionToRoute(gpsPos);
+  const guidanceTarget = routeLookAheadTarget() || target;
+  const origin = routeMatchedPos || gpsPos;
+
+  distToTarget = localDistance(gpsPos, target);
+  bearing = localBearing(origin, guidanceTarget);
+  updateArrowRotation();
 }
 
 function legText(i) {
@@ -1145,49 +2225,12 @@ function getTargetAltitude(t) {
   if (!t) return null;
   if (Number.isFinite(t.alt)) return t.alt;
   const b = BUILDINGS[dest];
-  if (b && Number.isFinite(b.alt)) return b.alt;
+  if (b && t === b && Number.isFinite(b.alt)) return b.alt;
   return null;
 }
 
 function buildDynamicRoute(key) {
-  const b = BUILDINGS[key];
-  if (!b) return;
-
-  // Current GPS is the true origin. A selected building is a fixed origin.
-  let source = null;
-  let sourceName = '';
-
-  if (routeMode === 'current') {
-    if (!gpsPos) {
-      showToast('Waiting for your GPS position…');
-      startGPS();
-      return false;
-    }
-    source = {
-      lat: gpsPos.lat, lng: gpsPos.lng,
-      alt: Number.isFinite(gpsPos.alt) ? gpsPos.alt : null
-    };
-    sourceName = 'Your current location';
-  } else if (routeMode === 'building') {
-    const sb = BUILDINGS[routeSourceKey];
-    if (!sb || routeSourceKey === key) {
-      showToast(routeSourceKey === key ? 'Choose a different starting building' : 'Choose a starting building');
-      return false;
-    }
-    source = {lat: sb.lat, lng: sb.lng, alt: Number.isFinite(sb.alt) ? sb.alt : null};
-    sourceName = sb.name;
-  }
-
-  activeRouteStart = source;
-  activeRouteWaypoints = []; // dynamic routes do not reuse gate-only waypoints
-  activeRouteSteps = [
-    'Starting from ' + sourceName,
-    'Walk toward ' + b.name + ' using the live AR direction',
-    'You have arrived at ' + b.name
-  ];
-
-  // Keep the source visible in the route details.
-  return true;
+  return buildCalibratedCampusRoute(key);
 }
 
 function setDestination(key, options = {}) {
@@ -1197,12 +2240,12 @@ function setDestination(key, options = {}) {
   if (options.mode) routeMode = options.mode;
   if (options.sourceKey !== undefined) routeSourceKey = options.sourceKey;
 
-  // Preserve the original QR/gate behavior unless a new route mode was chosen.
-  if (routeMode === 'gate') {
-    activeRouteWaypoints = b.waypoints || [];
-    activeRouteSteps = b.steps || [];
-    activeRouteStart = null;
-  } else if (!buildDynamicRoute(key)) {
+  // All routes follow the calibrated campus walkway graph.
+  activeRouteGeometry = null;
+  activeRouteWaypoints = null;
+  activeRouteSteps = null;
+  activeRouteStart = null;
+  if (!buildCalibratedCampusRoute(key)) {
     return;
   }
 
@@ -1212,12 +2255,33 @@ function setDestination(key, options = {}) {
   arrived = false;
   arrowRotation = 0;
   currentArrowRot = 0;
+  const keepExistingHeading = headingValid && cameraHeadingValid;
+  if (!keepExistingHeading) {
+    heading = 0;
+    headingValid = false;
+    courseSamples = 0;
+    gpsHistory = [];
+    rawGpsPos = null;
+    routeMatchedPos = null;
+    cameraHeading = 0;
+    cameraHeadingValid = false;
+    fallbackAlpha = null;
+  } else {
+    courseSamples = Math.max(courseSamples, 1);
+  }
+  lastCourseTime = 0;
+  gpsHistory = [];
+  rawGpsPos = null;
+  routeMatchedPos = null;
+  calibrationNoticeShown = false;
+  lastMotionTime = 0;
+  motionYawSamples = 0;
+  lastGpsCorrectionTime = 0;
   targetAltitude = null;
   verticalAngle = 0;
 
   setDestinationUI(key);
   if (gpsPos) updateDistanceAndBearing();
-  loadRouteElevations(key);
 
   const u = new URL(location);
   u.searchParams.set('dest', key);
@@ -1229,7 +2293,6 @@ function setDestination(key, options = {}) {
   history.replaceState({}, '', u);
 
   startGPS();
-  startCompass();
 
   speak('Navigating to ' + b.name + '. ' + legText(0));
 }
@@ -1242,15 +2305,16 @@ function setDestinationUI(key) {
   document.getElementById('topbar-badge').classList.add('active');
   document.getElementById('p-name').textContent = b.name;
   document.getElementById('p-loc').textContent = b.loc;
-  document.getElementById('s-dist').textContent = b.dist.replace(/m$/, ' m');
-  document.getElementById('s-time').textContent = b.time;
+  document.getElementById('s-dist').textContent = gpsPos ? fmtDist(localDistance(gpsPos, b)) : b.dist.replace(/m$/, ' m');
+  document.getElementById('s-time').textContent = gpsPos ? '~' + Math.max(1, Math.ceil(localDistance(gpsPos, b) / Math.max(userSpeed, 0.6) / 60)) + ' min' : b.time;
   document.getElementById('s-gps').textContent = gpsPos ? '±' + Math.round(gpsPos.acc || 0) + 'm' : 'No GPS';
  
   refreshUI();
  
   document.getElementById('nav-top').classList.add('show');
+  refreshMiniMap();
   document.getElementById('nav-bottom').classList.add('show');
-  document.getElementById('compass').classList.add('show');
+  updateCalibrationButton(headingValid);
 }
  
 // Pictograms for the instruction plate (drawn with currentColor)
@@ -1262,48 +2326,53 @@ const TURN_ICONS = {
  
 function refreshUI() {
   if (!dest) return;
+
   const b = BUILDINGS[dest];
- 
-  // Instruction plate: the real turn (left / right / straight) plus leg progress
+  const routeSteps = getRouteSteps();
   const step = legText(stepIdx);
+
   document.getElementById('dir-text').textContent = step;
- 
+
   const t = step.toLowerCase();
   const turn = /\bleft\b/.test(t) ? 'left' : (/\bright\b/.test(t) ? 'right' : 'straight');
   document.getElementById('dir-icon').innerHTML = TURN_ICONS[turn];
- 
-  const legs = Math.max(1, b.steps.length - 1);
+
+  const legs = Math.max(1, routeSteps.length - 1);
   const cur = Math.min(stepIdx, legs - 1);
+
   let seg = '';
   for (let i = 0; i < legs; i++) {
     seg += '<i class="' + (i < cur ? 'done' : (i === cur ? 'now' : '')) + '"></i>';
   }
+
   const track = document.getElementById('step-track');
   track.innerHTML = seg;
   track.setAttribute('aria-label', 'Step ' + (cur + 1) + ' of ' + legs);
- 
+
   const target = targetForStep();
   const targetMeta = document.getElementById('target-meta');
   if (targetMeta && target) {
     const alt = Number.isFinite(target.alt) ? ' · ' + target.alt.toFixed(1) + ' m' : '';
-    targetMeta.textContent = target.lat.toFixed(6) + ', ' + target.lng.toFixed(6) + alt;
+    const lp = geoToLocalMeters(target);
+    targetMeta.textContent = 'LOCAL X ' + lp.x.toFixed(1) + ' m · Y ' + lp.y.toFixed(1) + ' m' + alt;
   }
- 
-  if (!gpsPos) {
-    // Without GPS, estimate remaining distance from the current leg onward.
+
+  if (gpsPos) {
+    document.getElementById('s-dist').textContent = fmtDist(distToDest);
+    const minutes = Math.max(1, Math.ceil(distToDest / Math.max(userSpeed, 0.6) / 60));
+    document.getElementById('s-time').textContent = '~' + minutes + ' min';
+  } else {
     let remaining = 0;
-    for (let i = stepIdx + 1; i < b.steps.length; i++) {
-      const m = /(\d+)m/i.exec(b.steps[i]);
+    for (let i = stepIdx + 1; i < routeSteps.length; i++) {
+      const m = /(\d+)m/i.exec(routeSteps[i]);
       if (m) remaining += parseInt(m[1], 10);
     }
-    if (remaining === 0) {
-      remaining = Math.max(1, b.steps.length - 1 - stepIdx) * 50;
-    }
+    if (remaining === 0) remaining = Math.max(1, routeSteps.length - 1 - stepIdx) * 50;
     document.getElementById('s-dist').textContent = Math.round(remaining) + ' m';
     document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining / (userSpeed * 60))) + ' min';
   }
 }
- 
+
 function toggleSheet() {
   const sheet = document.getElementById('sheet');
   const open = sheet.classList.toggle('open');
@@ -1323,11 +2392,15 @@ function finishNavigation() {
   activeRouteWaypoints = null;
   activeRouteSteps = null;
   activeRouteStart = null;
+  activeRouteGeometry = null;
+  heading=0; headingValid=false; courseSamples=0; courseBuffer=[];
+  manualCalibrationDone=false; cameraHeading=0; cameraHeadingValid=false;
+  updateCalibrationButton(false);
  
   document.getElementById('nav-top').classList.remove('show');
   document.getElementById('nav-bottom').classList.remove('show');
+  setMiniMapVisible(false);
   document.getElementById('sheet').classList.remove('open');
-  document.getElementById('compass').classList.remove('show');
   document.getElementById('gps-dot').classList.remove('show');
  
   document.getElementById('topbar-title').textContent = 'CSU-A AR';
@@ -1335,7 +2408,6 @@ function finishNavigation() {
   document.getElementById('topbar-badge').classList.remove('active');
  
   history.replaceState({}, '', location.pathname);
-  stopCompass();
  
   // Show search after finishing navigation
   setTimeout(() => openSearch(), 500);
@@ -1380,18 +2452,17 @@ function renderLoop(ts = 0) {
     if ((arFrame++ % 5) === 0) updateArLayout();
     arCy += (arCyTarget - arCy) * Math.min(1, dt * 8);
  
-    // The marker stays locked to the centre of the free camera area; GPS +
-    // compass drive its rotation, so it never slides around the screen.
+    // The marker stays locked to the centre of the free camera area.
+    // GPS movement determines the arrow's relative turn.
     const cx = arW / 2;
     const cy = arCy || arH / 2;
     const bob = REDUCED_MOTION ? 0 : Math.sin(ts / 450) * 3;
  
-    // Smooth compass/GPS changes so the arrow does not twitch when the
-    // phone's heading fluctuates by a few degrees.
+    // Smooth GPS-course changes so the arrow does not twitch when fixes vary.
     let angleDelta = normalizeAngle(
       (arrowRotation - currentArrowRot) * 180 / Math.PI
     ) * Math.PI / 180;
-    currentArrowRot += angleDelta * Math.min(1, dt * 8);
+    currentArrowRot += angleDelta * Math.min(1, dt * 10);
  
     drawGroundGlow(cx, cy + 10, ts);
     if (!REDUCED_MOTION) drawPulseRings(cx, cy, ts);
@@ -1412,7 +2483,7 @@ function projectTargetToScreen() {
  
   if (!gpsPos || !dest) return { x: centerX, y: centerY };
  
-  const horizontalDiff = normalizeAngle(bearing - heading);
+  const horizontalDiff = normalizeAngle(bearing - (cameraHeadingValid ? cameraHeading : heading));
   const hFov = 70 * Math.PI / 180;
   const vFov = 55 * Math.PI / 180;
  
@@ -1421,7 +2492,7 @@ function projectTargetToScreen() {
   const xNorm = Math.tan(horizontalDiff * Math.PI / 180) / Math.tan(hFov / 2);
   const x = Math.max(34, Math.min(arW - 34, centerX + xNorm * (arW / 2)));
  
-  const relativeElevation = verticalAngle - (cameraPitch * Math.PI / 180);
+  const relativeElevation = verticalAngle;
   const yNorm = Math.tan(relativeElevation) / Math.tan(vFov / 2);
   const y = Math.max(arH * 0.20, Math.min(arH * 0.82, centerY - yNorm * (arH / 2)));
  
@@ -1728,6 +2799,7 @@ function renderSearchResults(query) {
  
 async function selectSearchResult(key) {
   closeSearch();
+  await requestMotionPermission();
   // Ask for location BEFORE the camera inside this tap — the browser only
   // allows one permission prompt per tap, so this is what actually makes the
   // GPS prompt appear when the user picks a destination.
@@ -2011,13 +3083,23 @@ async function flushPendingFeedback() {
 }
  
 /* ================================================================
+   LOCAL GRAPH DEBUG API
+   ================================================================ */
+window.CSUA_LOCAL_GRAPH = {
+  origin: CAMPUS_LOCAL_ORIGIN,
+  nodes: localGraphSummary,
+  edges: CAMPUS_GRAPH_EDGES,
+  geoToLocalMeters,
+  localMetersToGeo
+};
+
+/* ================================================================
    CLEANUP
    ================================================================ */
 window.addEventListener('beforeunload', () => {
   if (stream) stream.getTracks().forEach(t => t.stop());
   if (animFrame) cancelAnimationFrame(animFrame);
   stopGPS();
-  stopCompass();
 });
 </script>
 </body>
