@@ -2,332 +2,536 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#00224a">
 <title>CSU-A AR Navigation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <style>
-  :root{--blue:#1a56db;--blue-light:#3b82f6;--blue-dark:#1e40af;--green:#059669;--gold:#d97706;--red:#dc2626;--radius:14px}
+  /* ================================================================
+     DESIGN TOKENS
+     Look: campus directional signage. Navy plates, gold pictograms,
+     condensed DIN-style numerals. Opaque surfaces over the camera
+     (readable in sunlight) instead of frosted glass.
+     ================================================================ */
+  :root{
+    --navy:#00224a;       /* signage plate */
+    --navy-2:#0b3a78;
+    --blue:#003d82;       /* CSU brand blue */
+    --blue-2:#1a5faf;
+    --gold:#ffcf1f;       /* CSU gold, used as a fill, never as small text on white */
+    --gold-soft:#ffe58a;
+    --paper:#ffffff;
+    --chalk:#f2f5fa;
+    --ink:#0b1b33;
+    --mist:#5b6d88;
+    --line:#dde5f0;
+    --ok:#12a36b;
+    --font-display:'Barlow Semi Condensed','Barlow',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --font-body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --ease:cubic-bezier(.16,1,.3,1);
+    --focus:var(--gold);
+  }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden;position:fixed;top:0;left:0;width:100%;background:#000}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
-  button{font-family:inherit}
-
+  body{font-family:var(--font-body);color:var(--ink);-webkit-font-smoothing:antialiased;text-size-adjust:100%;-webkit-text-size-adjust:100%}
+  button{font-family:inherit;cursor:pointer}
+  button:focus-visible,textarea:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+ 
   #app{width:100%;height:100%;position:relative;overflow:hidden}
-
-  /* ── Camera ── */
-  #camera-feed{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:1;background:#111}
-  #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
-
-  /* ── Mini Map (AR overlay, Google Maps style) ── */
-  #minimap-canvas{position:absolute;z-index:5;top:130px;right:14px;width:120px;height:120px;border-radius:16px;pointer-events:none;background:rgba(15,23,42,0.72);border:2px solid rgba(255,255,255,0.18);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,0.45);display:none}
-
-  /* ── Loading ── */
-  .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
-  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
-  .overlay-dark{background:#0f172a;color:#fff}
-  .overlay-scan{background:rgba(0,0,0,.75);z-index:30}
-  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.12);border-top-color:var(--blue-light);border-radius:50%;animation:spin .7s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-
-  /* ── Top Bar ── */
-  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(0,0,0,.72) 0%,transparent 100%);display:flex;align-items:center;gap:10px;pointer-events:none}
-  .topbar>*{pointer-events:auto}
-  .topbar-title{flex:1;color:#fff;font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .topbar-badge{background:var(--blue);color:#fff;font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;transition:background .3s}
-  .topbar-badge.active{background:var(--green)}
-  .topbar-btn{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);flex-shrink:0;cursor:pointer}
-
-  /* ── Compass ── */
-  .compass{position:absolute;top:60px;right:14px;z-index:20;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.15)}
-  .compass.show{display:flex}
-  .compass-needle{width:28px;height:28px;transition:transform .15s linear}
-
-  /* ── GPS indicator ── */
-  .gps-dot{position:absolute;top:60px;left:14px;z-index:20;width:10px;height:10px;border-radius:50%;background:#6b7280;display:none}
-  .gps-dot.show{display:block}
-  .gps-dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}
-
-  /* ── Scanner ── */
-  .scan-frame{width:250px;height:250px;border:2.5px solid rgba(255,255,255,.85);border-radius:18px;position:relative;margin-bottom:20px}
-  .scan-frame::before{content:'';position:absolute;inset:-3px;border-radius:20px;border:3px solid transparent;border-top-color:var(--blue-light);animation:rotateBorder 1.4s linear infinite}
-  @keyframes rotateBorder{to{transform:rotate(360deg)}}
-  .scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--blue-light),transparent);animation:scanY 2.2s ease-in-out infinite}
-  @keyframes scanY{0%,100%{top:8px}50%{top:calc(100% - 8px)}}
-  .scan-corners{position:absolute;inset:-1px}
-  .scan-corners::before,.scan-corners::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
-  .scan-corners::before{top:-1px;left:-1px;border-width:3px 0 0 3px;border-radius:14px 0 0 0}
-  .scan-corners::after{top:-1px;right:-1px;border-width:3px 3px 0 0;border-radius:0 14px 0 0}
-  .scan-corners-bottom::before,.scan-corners-bottom::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
-  .scan-corners-bottom{position:absolute;bottom:-1px;left:-1px;right:-1px}
-  .scan-corners-bottom::before{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 14px}
-  .scan-corners-bottom::after{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 14px 0}
-  .scan-hint{color:#fff;font-size:14px;text-align:center;line-height:1.6;text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 16px}
-  .scan-hint strong{display:block;font-size:16px;margin-bottom:4px}
-  .scan-cancel{margin-top:16px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-  .scan-fallback{margin-top:12px}
-  .scan-fallback input{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;width:220px;text-align:center;outline:none}
-  .scan-fallback input::placeholder{color:rgba(255,255,255,.4)}
-  .scan-fallback button{margin-top:8px;background:var(--blue);border:none;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;width:220px;cursor:pointer}
-
-  /* ── Bottom Panel ── */
-  .bottom-panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:rgba(255,255,255,.97);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:22px 22px 0 0;padding:16px 18px max(18px,env(safe-area-inset-bottom));box-shadow:0 -4px 32px rgba(0,0,0,.12);transform:translateY(100%);transition:transform .45s cubic-bezier(.16,1,.3,1)}
-  .bottom-panel.show{transform:translateY(0)}
-  .panel-handle{width:32px;height:4px;background:#d1d5db;border-radius:2px;margin:0 auto 12px}
-  .panel-name{font-size:17px;font-weight:800;color:#111827;line-height:1.2}
-  .panel-sub{font-size:12px;color:#6b7280;margin:3px 0 10px;display:flex;align-items:center;gap:4px}
-  .panel-sub .icon{font-size:14px}
-
-  /* Direction card */
-  .dir-card{display:flex;align-items:center;gap:12px;background:#f0f4ff;border-radius:var(--radius);padding:12px;margin-bottom:12px}
-  .dir-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .dir-label{font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-  .dir-text{font-size:15px;font-weight:700;color:#111827;line-height:1.25}
-
-  /* Stats row */
-  .stats-row{display:flex;gap:8px;margin-bottom:10px}
-  .stat{flex:1;background:#f5f7fa;border-radius:12px;padding:9px 8px;text-align:center}
-  .stat-val{font-size:15px;font-weight:800;color:var(--blue)}
-  .stat-lbl{font-size:9px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
-
-  /* Steps */
-  .steps{max-height:120px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:12px}
-  .step{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid #f3f4f6}
-  .step:last-child{border:none}
-  .step-num{width:22px;height:22px;border-radius:50%;background:#e5e7eb;color:#6b7280;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;transition:all .3s}
-  .step.done .step-num{background:var(--green);color:#fff}
-  .step.current .step-num{background:var(--blue);color:#fff;box-shadow:0 0 0 3px rgba(26,86,219,.2)}
-  .step-txt{font-size:12px;color:#6b7280;line-height:1.4;transition:color .3s}
-  .step.done .step-txt{color:#9ca3af;text-decoration:line-through}
-  .step.current .step-txt{color:#111827;font-weight:600}
-
-  /* Buttons */
-  .btn-row{display:flex;gap:8px}
-  .btn{flex:1;padding:12px;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s}
+ 
+  /* ── Shared buttons ── */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 22px;border:0;border-radius:14px;font:700 17px/1 var(--font-display);letter-spacing:.2px;transition:transform .12s,background .2s,opacity .2s}
   .btn:active{transform:scale(.97)}
-  .btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;box-shadow:0 4px 14px rgba(26,86,219,.3)}
-  .btn-success{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 14px rgba(5,150,105,.3)}
-  .btn-outline{background:#f0f4ff;color:var(--blue)}
-
-  /* ── No Camera ── */
-  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#0f172a,#1e293b);color:#fff;padding:32px;text-align:center}
-  .no-cam-icon{font-size:56px;margin-bottom:16px}
-  .no-cam h2{font-size:20px;margin-bottom:6px}
-  .no-cam p{font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:20px;max-width:300px}
-  .no-cam button{background:var(--blue);color:#fff;border:none;padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer}
-
+  .btn-gold{background:var(--gold);color:var(--navy)}
+  .btn-ghost{background:rgba(255,255,255,.1);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.3)}
+ 
+  /* ── Camera (full screen) ── */
+  .ar-half{position:absolute;inset:0;overflow:hidden}
+  #camera-feed{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:1;background:#0a1526}
+  #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
+ 
+  /* ── Full-screen overlays: boot, permission gates ── */
+  .overlay{position:absolute;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--safe-t) + 24px) 24px calc(var(--safe-b) + 24px);transition:opacity .4s,visibility .4s}
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay-navy{background:var(--navy);color:#fff}
+ 
+  .boot-logo{width:108px;height:auto;overflow:visible}
+  .boot-line{fill:none;stroke:url(#logoGrad);stroke-width:5;stroke-linejoin:miter;stroke-dasharray:1 1;animation:bootDraw 2.6s cubic-bezier(.65,0,.35,1) infinite}
+  @keyframes bootDraw{0%{stroke-dashoffset:1}45%,70%{stroke-dashoffset:0}100%{stroke-dashoffset:-1}}
+  .boot-text{margin-top:18px;font:500 15px var(--font-body);color:rgba(255,255,255,.75)}
+ 
+  .gate{width:100%;max-width:340px}
+  .gate-logo{width:56px;height:auto;margin-bottom:24px;overflow:visible}
+  .gate-logo path{fill:none;stroke:url(#logoGrad);stroke-width:5;stroke-linejoin:miter}
+  .gate-title{font:700 32px/1.05 var(--font-display);letter-spacing:-.2px;margin-bottom:10px}
+  .gate-copy{font-size:16px;line-height:1.5;color:rgba(255,255,255,.8);margin-bottom:22px}
+  .perm-list{list-style:none;border-top:1px solid rgba(255,255,255,.16);margin-bottom:22px}
+  .perm-list li{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.16)}
+  .perm-list svg{width:22px;height:22px;color:var(--gold);flex-shrink:0}
+  .perm-name{flex:1;font-weight:600;font-size:16px}
+  .perm-state{font:600 15px var(--font-display);color:rgba(255,255,255,.65)}
+  .perm-state[data-state="granted"]{color:#57e0a4}
+  .perm-state[data-state="denied"]{color:#ff9aa1}
+  .gate-btns{display:flex;gap:10px}
+  .gate-btns .btn{flex:1}
+  .gate-btns .btn-gold{flex:1.5}
+  .gate-hint{margin-top:16px;font-size:14px;line-height:1.5;color:var(--gold-soft)}
+  .gate-hint b{color:var(--gold)}
+  .gate-hint small{color:rgba(255,255,255,.6)}
+  .gate-skip{margin-top:12px;background:none;border:0;color:rgba(255,255,255,.65);font:500 15px var(--font-body);text-decoration:underline;min-height:44px;padding:0 8px}
+ 
+  /* ── Top bar ── */
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:8px;padding:calc(var(--safe-t) + 10px) 12px 14px;background:linear-gradient(180deg,rgba(0,18,44,.6),rgba(0,18,44,0));pointer-events:none}
+  .topbar>*{pointer-events:auto}
+  .topbar-btn{width:40px;height:40px;border-radius:50%;border:0;background:rgba(0,34,74,.88);color:#fff;display:grid;place-items:center;flex-shrink:0;box-shadow:0 0 0 1px rgba(255,255,255,.16)}
+  .topbar-title{flex:1;min-width:0;color:#fff;font:700 19px/1 var(--font-display);letter-spacing:.3px;text-shadow:0 1px 6px rgba(0,0,0,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-badge{flex-shrink:0;padding:7px 12px;border-radius:999px;background:rgba(0,34,74,.88);color:#fff;font:600 14px/1 var(--font-display);box-shadow:0 0 0 1px rgba(255,255,255,.16);transition:background .3s,color .3s}
+  .topbar-badge.active{background:var(--gold);color:var(--navy);box-shadow:none}
+  .gps-dot{display:none;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.45);flex-shrink:0}
+  .gps-dot.show{display:block}
+  .gps-dot.on{background:var(--gold);box-shadow:0 0 0 3px rgba(255,207,31,.3)}
+ 
+  /* ── Instruction plate (top) ── */
+  .nav-top{position:absolute;top:0;left:0;right:0;z-index:22;padding:calc(var(--safe-t) + 58px) 12px 0;transform:translateY(-140%);transition:transform .5s var(--ease);pointer-events:none}
+  .nav-top.show{transform:translateY(0)}
+  .plate{pointer-events:auto;display:flex;background:var(--navy);border-radius:18px;overflow:hidden;box-shadow:0 12px 32px rgba(0,12,36,.5),0 0 0 1px rgba(255,255,255,.08)}
+  .plate-icon{width:76px;flex-shrink:0;display:grid;place-items:center;background:var(--gold);color:var(--navy)}
+  .plate-icon svg{width:44px;height:44px}
+  .plate-body{flex:1;min-width:0;padding:13px 16px 13px 16px}
+  .plate-text{font:700 20px/1.15 var(--font-display);color:#fff;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .plate-track{display:flex;gap:4px;margin-top:11px}
+  .plate-track i{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.2);transition:background .3s}
+  .plate-track i.done{background:var(--gold)}
+  .plate-track i.now{background:#fff}
+ 
+  /* ── Bottom sheet ── */
+  .nav-bottom{position:absolute;left:0;right:0;bottom:0;z-index:22;padding:0 10px calc(var(--safe-b) + 10px);transform:translateY(130%);transition:transform .5s var(--ease);pointer-events:none;--focus:var(--blue-2)}
+  .nav-bottom.show{transform:translateY(0)}
+  .sheet{pointer-events:auto;position:relative;background:var(--paper);border-radius:24px;box-shadow:0 -6px 30px rgba(0,12,36,.35);padding:2px 18px 18px}
+  .sheet-grip{display:block;width:100%;height:26px;background:none;border:0;position:relative}
+  .sheet-grip::after{content:'';position:absolute;left:50%;top:10px;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:#c5d0e0}
+  .sheet-head{display:flex;align-items:center;gap:12px}
+  .sheet-title{flex:1;min-width:0}
+  .panel-name{font:700 24px/1.1 var(--font-display);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .panel-sub{font-size:14px;color:var(--mist);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .voice-btn{width:48px;height:48px;flex-shrink:0;border-radius:50%;border:0;background:var(--chalk);color:var(--navy);display:grid;place-items:center;box-shadow:inset 0 0 0 1.5px var(--line);transition:color .2s,background .2s}
+  .voice-btn.off{color:var(--mist);background:#fff}
+  .metrics{display:flex;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .metric{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+  .metric.main{flex:1.4}
+  .metric+.metric{padding-left:16px;border-left:1px solid var(--line)}
+  .metric-val{font:700 26px/1 var(--font-display);font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+  .metric.main .metric-val{font-size:38px;color:var(--blue)}
+  .metric-lbl{font-size:13px;color:var(--mist);font-weight:500}
+  .sheet-more{display:grid;grid-template-rows:0fr;transition:grid-template-rows .35s var(--ease)}
+  .sheet.open .sheet-more{grid-template-rows:1fr}
+  .sheet-more-inner{overflow:hidden;min-height:0}
+  .details{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:grid;gap:10px}
+  .detail{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:14px}
+  .detail dt{color:var(--mist);flex-shrink:0}
+  .detail dd{color:var(--ink);text-align:right;font:500 12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+  .gps-readout{display:flex;flex-direction:column;align-items:flex-end}
+ 
+  .compass{position:absolute;right:14px;top:-62px;width:48px;height:48px;border-radius:50%;background:var(--navy);display:none;place-items:center;box-shadow:0 6px 18px rgba(0,12,36,.4),0 0 0 2px rgba(255,255,255,.16)}
+  .compass.show{display:grid}
+  .compass-needle{width:26px;height:26px;transition:transform .15s linear}
+ 
+  /* ── No camera ── */
+  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--navy);color:#fff;padding:32px;text-align:center}
+  .no-cam-icon{width:72px;height:72px;border-radius:20px;background:var(--gold);color:var(--navy);display:grid;place-items:center;margin-bottom:22px}
+  .no-cam-icon svg{width:36px;height:36px}
+  .no-cam h2{font:700 30px/1.05 var(--font-display);margin-bottom:10px}
+  .no-cam-copy{font-size:16px;line-height:1.5;color:rgba(255,255,255,.8);margin-bottom:14px;max-width:310px}
+  .no-cam-reason{font-size:14px;line-height:1.5;color:var(--gold-soft);margin-bottom:22px;max-width:310px}
+  .no-cam-reason:empty{display:none}
+  .no-cam-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px}
+ 
   /* ── Arrival ── */
-  .arrival{position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:all .4s}
+  .arrival{position:absolute;inset:0;z-index:40;background:#001b3d;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:calc(var(--safe-t) + 24px) 24px calc(var(--safe-b) + 24px);overflow-y:auto;opacity:0;visibility:hidden;transition:opacity .4s,visibility .4s}
   .arrival.show{opacity:1;visibility:visible}
-  .arrival-circle{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#10b981,#059669);display:flex;align-items:center;justify-content:center;margin-bottom:18px;animation:popIn .5s cubic-bezier(.16,1,.3,1)}
-  @keyframes popIn{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
-  .arrival h2{color:#fff;font-size:22px;font-weight:800;margin-bottom:4px}
-  .arrival p{color:#94a3b8;font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
-  .arrival button{background:#fff;color:#0f172a;border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer}
-  .fb-area{margin-top:8px;text-align:center}
-  .fb-stars{display:flex;gap:6px;justify-content:center;margin-bottom:8px}
-  .fb-star{font-size:28px;color:rgba(255,255,255,.35);cursor:pointer;transition:color .15s,transform .15s}
-  .fb-star:hover,.fb-star.on{color:#facc15;transform:scale(1.15)}
-  .fb-msg{width:86%;max-width:280px;padding:10px 12px;border:1.5px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.08);color:#fff;font-size:13px;resize:none;margin-bottom:10px;font-family:inherit}
-  .fb-msg::placeholder{color:rgba(255,255,255,.45)}
-  .fb-submit{background:var(--blue);color:#fff;padding:9px 20px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;margin-right:8px}
-  .fb-submit:disabled{opacity:.5;cursor:default}
-  .fb-skip{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer;vertical-align:middle;text-decoration:underline}
-  .fb-thanks{color:#22c55e;font-size:14px;font-weight:700;margin-top:8px}
-
-  /* ── Toast ── */
-  .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,0,0,.85);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-
-  /* ── Search Overlay ── */
-  .search-overlay{position:absolute;inset:0;z-index:45;background:#0f172a;display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.16,1,.3,1),opacity .3s}
-  .search-overlay.hidden{transform:translateY(100%);opacity:0;pointer-events:none}
-  .search-header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.08)}
-  .search-header h2{color:#fff;font-size:17px;font-weight:800;flex:1}
-  .search-close{width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
-  .search-input-wrap{padding:12px 16px;position:relative}
-  .search-input-wrap svg{position:absolute;left:28px;top:50%;transform:translateY(-50%);color:#64748b;pointer-events:none}
-  .search-input{width:100%;padding:13px 14px 13px 44px;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);border-radius:14px;color:#fff;font-size:15px;outline:none;transition:border-color .2s}
-  .search-input:focus{border-color:var(--blue-light)}
-  .search-input::placeholder{color:#64748b}
-  .search-results{flex:1;overflow-y:auto;padding:4px 16px 100px;-webkit-overflow-scrolling:touch}
-  .search-result{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:14px;cursor:pointer;transition:background .15s}
-  .search-result:active{background:rgba(255,255,255,.08)}
-  .search-result-icon{width:42px;height:42px;border-radius:12px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
-  .search-result-info{flex:1;min-width:0}
-  .search-result-name{color:#fff;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .search-result-loc{color:#64748b;font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .search-result-dist{color:var(--blue-light);font-size:12px;font-weight:700;flex-shrink:0}
-  .search-section-label{color:#475569;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:16px 12px 8px}
-  .search-empty{text-align:center;padding:60px 20px;color:#475569;font-size:14px}
-  .search-empty-icon{font-size:40px;margin-bottom:12px}
-
-
+  .arrival-mark{width:92px;height:92px;margin-bottom:16px}
+  .arrival-mark circle,.arrival-mark path{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1 1;stroke-dashoffset:1}
+  .arrival-mark circle{fill:rgba(255,207,31,.1)}
+  .arrival.show .arrival-mark circle{animation:markDraw .8s var(--ease) forwards}
+  .arrival.show .arrival-mark path{animation:markDraw .45s .5s var(--ease) forwards}
+  @keyframes markDraw{to{stroke-dashoffset:0}}
+  .arrival h2{font:700 38px/1 var(--font-display);margin-bottom:8px}
+  .arrival-msg{font-size:17px;color:rgba(255,255,255,.8);text-align:center;margin-bottom:22px}
+  .arrival-done{width:100%;max-width:340px;margin-top:6px}
+ 
+  /* ── Feedback ── */
+  .fb-area{width:100%;max-width:340px;text-align:center}
+  .fb-stars{display:flex;gap:2px;justify-content:center}
+  .fb-star{background:none;border:0;font-size:42px;line-height:1;padding:2px 5px;min-width:48px;min-height:48px;color:rgba(255,255,255,.25);transition:color .12s,transform .12s,text-shadow .2s}
+  .fb-star.hover{color:var(--gold-soft)}
+  .fb-star.on{color:var(--gold);text-shadow:0 3px 14px rgba(255,207,31,.5)}
+  .fb-star.pop{animation:starPop .38s var(--ease)}
+  @keyframes starPop{0%{transform:scale(.5)}55%{transform:scale(1.4)}100%{transform:scale(1)}}
+  .fb-stars.shake{animation:starShake .4s ease}
+  @keyframes starShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}50%{transform:translateX(8px)}75%{transform:translateX(-5px)}}
+  .fb-label{color:rgba(255,255,255,.85);font:600 17px var(--font-display);margin:2px 0 14px;min-height:20px;animation:fbFadeUp .3s ease}
+  @keyframes fbFadeUp{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+  .fb-msg-wrap{position:relative;margin:0 auto 14px}
+  .fb-msg{width:100%;padding:12px 14px 26px;border:1.5px solid rgba(255,255,255,.22);border-radius:14px;background:rgba(255,255,255,.07);color:#fff;font:400 16px/1.4 var(--font-body);resize:none;outline:none;display:block;transition:border-color .2s,background .2s}
+  .fb-msg::placeholder{color:rgba(255,255,255,.5)}
+  .fb-msg:focus{border-color:var(--gold);background:rgba(255,255,255,.11)}
+  .fb-count{position:absolute;right:12px;bottom:8px;font-size:12px;color:rgba(255,255,255,.5);font-variant-numeric:tabular-nums}
+  .fb-actions{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px}
+  .fb-submit{flex:1}
+  .fb-submit:disabled{opacity:.4;cursor:default}
+  .fb-submit .fb-check{display:none}
+  .fb-submit.success{background:var(--ok);color:#fff;opacity:1}
+  .fb-submit.success .fb-check{display:block}
+  .fb-submit.success .fb-submit-txt{display:none}
+  .fb-spinner{width:16px;height:16px;border:2.5px solid rgba(0,34,74,.25);border-top-color:var(--navy);border-radius:50%;animation:spin .6s linear infinite;display:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .fb-submit.loading .fb-spinner{display:block}
+  .fb-submit.loading .fb-submit-txt{display:none}
+  .fb-skip{background:transparent;border:0;color:rgba(255,255,255,.7);font:500 16px var(--font-body);text-decoration:underline;padding:0 14px;min-height:52px}
+  .fb-thanks{display:flex;flex-direction:column;align-items:center;color:#fff;padding:8px 0;animation:fbThanksIn .5s var(--ease)}
+  .fb-thanks-inner{display:flex;align-items:center;gap:10px;font:700 22px var(--font-display);color:var(--gold)}
+  .fb-thanks-sub{color:rgba(255,255,255,.7);font-size:15px;margin-top:8px}
+  @keyframes fbThanksIn{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}
+ 
+  /* ── Toast (sits in the top-bar zone, above every overlay) ── */
+  .toast{position:absolute;top:calc(var(--safe-t) + 12px);left:50%;transform:translate(-50%,-14px);z-index:60;width:max-content;max-width:min(92vw,420px);background:var(--paper);color:var(--ink);border-left:5px solid var(--gold);padding:12px 16px;border-radius:12px;font:600 15px/1.3 var(--font-body);opacity:0;transition:opacity .3s,transform .3s var(--ease);pointer-events:none;box-shadow:0 10px 30px rgba(0,12,36,.4)}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+ 
+  /* ── Search (destination picker) ── */
+  .search-overlay{position:absolute;inset:0;z-index:45;background:var(--chalk);display:flex;flex-direction:column;transition:transform .45s var(--ease),opacity .3s,visibility 0s;--focus:var(--blue-2)}
+  .search-overlay.hidden{transform:translateY(100%);opacity:0;pointer-events:none;visibility:hidden;transition:transform .45s var(--ease),opacity .3s,visibility 0s .45s}
+  .search-top{background:var(--navy);color:#fff;padding:calc(var(--safe-t) + 12px) 16px 18px;border-bottom:4px solid var(--gold)}
+  .search-bar-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .search-close{width:40px;height:40px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;flex-shrink:0}
+  .search-close.is-hidden{display:none}
+  .search-top h2{font:700 32px/1 var(--font-display)}
+  .search-field{position:relative;display:block}
+  .search-field svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;color:var(--mist);pointer-events:none}
+  .search-input{width:100%;height:54px;padding:0 14px 0 44px;background:#fff;border:2px solid transparent;border-radius:14px;color:var(--ink);font:500 17px var(--font-body);outline:none;transition:border-color .2s}
+  .search-input:focus{border-color:var(--gold)}
+  .search-input::placeholder{color:#7c8ba3}
+  .search-locate{display:flex;align-items:center;gap:10px;width:calc(100% - 32px);margin:14px 16px 0;padding:0 14px;min-height:48px;border-radius:12px;border:1.5px dashed #b4c2d8;background:transparent;color:var(--navy);font:600 15px var(--font-body);text-align:left;transition:background .2s}
+  .search-locate svg{color:var(--blue-2);flex-shrink:0}
+  .search-locate.located{border-style:solid;border-color:#9bdfc3;background:#e6f7ef;color:#0a6b47}
+  .search-locate.located svg{color:var(--ok)}
+  .search-results{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 0 calc(var(--safe-b) + 24px)}
+  .search-section-label{padding:16px 16px 8px;font:600 15px var(--font-body);color:var(--mist)}
+  .search-result{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;width:100%;padding:13px 16px;cursor:pointer;border-bottom:1px solid var(--line);background:var(--chalk)}
+  .search-result:active{background:#e4ebf6}
+  .search-result:focus-visible{outline:3px solid var(--blue-2);outline-offset:-3px}
+  .code{flex:0 0 auto;width:56px;height:46px;border-radius:10px;background:var(--navy);color:var(--gold);display:grid;place-items:center;font:700 15px/1 var(--font-display);letter-spacing:.6px}
+  .search-result-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .search-result-name{font:700 19px/1.15 var(--font-display);color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .search-result-loc{font-size:14px;color:var(--mist);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .search-result-dist{flex:0 0 auto;font:700 19px var(--font-display);color:var(--blue);font-variant-numeric:tabular-nums}
+  .search-empty{text-align:center;padding:56px 28px;color:var(--mist);font-size:16px;line-height:1.5}
+  .search-empty svg{width:44px;height:44px;color:#9fb0c8;margin-bottom:12px}
+  .search-empty b{color:var(--ink)}
+  .route-start{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px 4px}
+  .route-start-btn{display:flex;align-items:center;gap:9px;text-align:left;min-height:58px;padding:9px 10px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+  .route-start-btn.active{border-color:var(--blue-2);box-shadow:inset 0 0 0 1px var(--blue-2);background:#f4f8ff}
+  .route-start-btn>span:first-child{font-size:20px;flex-shrink:0}
+  .route-start-btn b{display:block;font:600 14px/1.1 var(--font-body)}
+  .route-start-btn small{display:block;margin-top:3px;font-size:11px;color:var(--mist)}
+  .route-source-picker{padding:8px 16px 4px}
+  .route-source-picker label{display:block;font-size:12px;color:var(--mist);margin-bottom:5px}
+  .route-source-picker select{width:100%;height:44px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:0 10px;font:500 15px var(--font-body)}
+ 
+ 
+  /* ── Launch splash: full logo animation, plays once, tap to skip ── */
+  .splash{position:absolute;inset:0;z-index:80;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;transition:opacity .5s,visibility .5s;cursor:pointer}
+  .splash.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .splash-stage{position:relative;width:min(64vw,300px);aspect-ratio:300/270}
+  .splash-stage svg{position:relative;width:100%;height:100%;display:block;overflow:visible}
+  .splash-halo{position:absolute;inset:-35%;background:radial-gradient(closest-side,rgba(58,134,255,.3),rgba(58,134,255,0));opacity:0;animation:spHalo 3s ease forwards}
+  .sp-line,.sp-glow-line{fill:none;stroke:url(#logoGrad);stroke-linejoin:miter;stroke-miterlimit:10;stroke-dasharray:1 1;stroke-dashoffset:1;animation:spDraw 3s forwards}
+  .sp-line{stroke-width:4.5}
+  .sp-glow-line{stroke-width:10;filter:url(#logoBlur)}
+  .sp-glow{opacity:0;animation:spGlow 3s forwards}
+  .sp-spark{fill:none;stroke:#fffbe0;stroke-width:5;stroke-linecap:round;stroke-linejoin:miter;stroke-dasharray:.09 .91;stroke-dashoffset:0;opacity:0;filter:url(#logoBloom);animation:spSpark 3s forwards}
+  .splash-word{margin-top:30px;font:700 26px/1 var(--font-display);letter-spacing:.4px;color:#fff;opacity:0;transform:translateY(8px);animation:spWord .7s 1.9s var(--ease) forwards}
+  @keyframes spDraw{0%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}45%,100%{stroke-dashoffset:0}}
+  @keyframes spGlow{0%,15%{opacity:0}45%{opacity:.9}75%,100%{opacity:.5}}
+  @keyframes spSpark{0%,42%{stroke-dashoffset:0;opacity:0}44%{opacity:1;animation-timing-function:cubic-bezier(.45,0,.55,1)}88%{stroke-dashoffset:-1;opacity:1}90%,100%{stroke-dashoffset:-1;opacity:0}}
+  @keyframes spHalo{0%,15%{opacity:0}55%,100%{opacity:1}}
+  @keyframes spWord{to{opacity:1;transform:none}}
+ 
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+    .boot-line{stroke-dashoffset:0}
+  }
 </style>
-
 </head>
 <body>
+<!-- Shared gradient for the logo mark -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="logoGrad" gradientUnits="userSpaceOnUse" x1="290" y1="392" x2="512" y2="300">
+      <stop offset="0" stop-color="#3d7bff"/>
+      <stop offset=".42" stop-color="#63a0ff"/>
+      <stop offset=".58" stop-color="#ffd60a"/>
+      <stop offset="1" stop-color="#ffb703"/>
+    </linearGradient>
+    <filter id="logoBlur" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="logoBloom" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>
+ 
 <div id="app">
-  <!-- Loading -->
-  <div class="overlay overlay-dark" id="loading">
-    <div class="spinner"></div>
-    <p style="color:#94a3b8;font-size:13px;margin-top:14px">Starting camera...</p>
-  </div>
-
-  <!-- Start gate (direct dest links need a user tap for iOS camera + GPS permission) -->
-  <div class="overlay overlay-dark" id="start-gate" style="display:none">
-    <div style="font-size:52px;margin-bottom:16px">🧭</div>
-    <h2 style="color:#fff;font-size:20px;margin-bottom:8px">Start AR Navigation</h2>
-    <p style="color:#94a3b8;font-size:13px;line-height:1.5;text-align:center;max-width:280px;margin-bottom:20px">Tap below to allow camera and location access so the compass can guide you to your destination.</p>
-    <button onclick="beginFromGate()" style="background:var(--blue);color:#fff;border:none;padding:14px 40px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Start Navigation</button>
-  </div>
-
-  <!-- Camera -->
-  <video id="camera-feed" autoplay playsinline muted></video>
-  <canvas id="ar-canvas"></canvas>
-  <canvas id="minimap-canvas"></canvas>
-
-  <!-- No Camera -->
-  <div class="no-cam" id="no-cam" style="display:none">
-    <div class="no-cam-icon">📷</div>
-    <h2>Camera Required</h2>
-    <p>Allow camera access to use AR Navigation. Point your camera at QR codes placed at each building.</p>
-    <p style="font-size:12px;color:#64748b;margin-bottom:16px" id="no-cam-reason"></p>
-    <button onclick="initCamera()" style="margin-bottom:10px">Try Again</button>
-    <button onclick="openInBrowser()" style="background:transparent;border:1.5px solid rgba(255,255,255,.3);color:#94a3b8;padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Open in Chrome / Safari</button>
-  </div>
-
-  <!-- GPS dot -->
-  <div class="gps-dot" id="gps-dot"></div>
-
-  <!-- Compass -->
-  <div class="compass" id="compass">
-    <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle">
-      <polygon points="14,2 18,12 14,10 10,12" fill="#ef4444"/>
-      <polygon points="14,26 10,16 14,18 18,16" fill="#94a3b8"/>
+  <!-- Boot -->
+  <div class="overlay overlay-navy" id="loading">
+    <svg class="boot-logo" viewBox="280 192 240 208" aria-hidden="true">
+      <path class="boot-line" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
     </svg>
+    <p class="boot-text">Starting camera…</p>
   </div>
-
-  <!-- Top Bar -->
+ 
+  <!-- Permission gate: explicit Block / Allow before AR starts -->
+  <div class="overlay overlay-navy" id="start-gate" style="display:none">
+    <div class="gate">
+      <svg class="gate-logo" viewBox="280 192 240 208" aria-hidden="true">
+        <path d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+      </svg>
+      <h2 class="gate-title">Allow camera and location</h2>
+      <p class="gate-copy">AR wayfinding lays the route over your live camera view and uses your position to point the way to the building.</p>
+      <ul class="perm-list">
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span class="perm-name">Camera</span>
+          <span class="perm-state" id="perm-camera" data-state="prompt">—</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span class="perm-name">Location (GPS)</span>
+          <span class="perm-state" id="perm-location" data-state="prompt">—</span>
+        </li>
+      </ul>
+      <div class="gate-btns" id="gate-btns">
+        <button class="btn btn-ghost" id="gate-block-btn" onclick="blockPermissions()">Block</button>
+        <button class="btn btn-gold" id="gate-allow-btn" onclick="allowPermissions()">Allow</button>
+      </div>
+      <p class="gate-hint" id="gate-hint"></p>
+    </div>
+  </div>
+ 
+  <!-- Location permission gate (search entry: asks explicitly and auto-opens GPS) -->
+  <div class="overlay overlay-navy" id="gps-gate" style="display:none">
+    <div class="gate">
+      <svg class="gate-logo" viewBox="280 192 240 208" aria-hidden="true">
+        <path d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+      </svg>
+      <h2 class="gate-title">Allow location</h2>
+      <p class="gate-copy">Your location sorts buildings by distance and guides you straight to your destination.</p>
+      <div class="gate-btns">
+        <button class="btn btn-gold" onclick="allowGps()">Allow location</button>
+      </div>
+      <button class="gate-skip" onclick="dismissGpsGate()">Not now</button>
+    </div>
+  </div>
+ 
+  <!-- Camera (full screen, AR real-time) -->
+  <div class="ar-half">
+    <video id="camera-feed" autoplay playsinline muted></video>
+    <canvas id="ar-canvas"></canvas>
+  </div>
+ 
+  <!-- No camera -->
+  <div class="no-cam" id="no-cam" style="display:none">
+    <div class="no-cam-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1l22 22"/><path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>
+    </div>
+    <h2>Camera needed</h2>
+    <p class="no-cam-copy">Allow camera access to use AR navigation. The arrow is drawn over what your camera sees.</p>
+    <p class="no-cam-reason" id="no-cam-reason"></p>
+    <div class="no-cam-btns">
+      <button class="btn btn-gold" onclick="initCamera()">Try again</button>
+      <button class="btn btn-ghost" onclick="openInBrowser()">Open in Chrome / Safari</button>
+    </div>
+  </div>
+ 
+  <!-- Top bar -->
   <div class="topbar" id="topbar" style="display:none">
     <button class="topbar-btn" onclick="goHome()" aria-label="Back">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     </button>
-    <span class="topbar-title" id="topbar-title">CSU-A AR Navigation</span>
-    <button class="topbar-btn" onclick="openSearch()" aria-label="Search" title="Search destination">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </button>
-    <span class="topbar-badge" id="topbar-badge">QR SCAN</span>
-    <button class="topbar-btn" onclick="openScan()" aria-label="Scan QR">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+    <span class="topbar-title" id="topbar-title">CSU-A AR</span>
+    <div class="gps-dot" id="gps-dot" role="img" aria-label="GPS status"></div>
+    <span class="topbar-badge" id="topbar-badge">Ready</span>
+    <button class="topbar-btn" onclick="openSearch()" aria-label="Search destination" title="Search destination">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </button>
   </div>
-
-  <!-- QR Scanner Overlay -->
-  <div class="overlay overlay-scan hidden" id="scan-overlay">
-    <div class="scan-frame">
-      <div class="scan-line"></div>
-      <div class="scan-corners"></div>
-      <div class="scan-corners-bottom"></div>
-      <canvas id="scan-canvas" style="display:none"></canvas>
-    </div>
-    <div class="scan-hint">
-      <strong>Scan Building QR Code</strong>
-      Point your camera at a QR code at any CSU-A building
-    </div>
-    <div class="scan-fallback">
-      <input type="text" id="manual-input" placeholder="Or type building key (e.g. admin)">
-      <button onclick="manualNavigate()">Go</button>
-    </div>
-    <button class="scan-cancel" onclick="closeScan()">Cancel</button>
-  </div>
-
-  <!-- Bottom Panel -->
-  <div class="bottom-panel" id="bottom-panel">
-    <div class="panel-handle"></div>
-    <div class="panel-name" id="p-name"></div>
-    <div class="panel-sub" id="p-sub"></div>
-    <div class="dir-card" id="dir-card">
-      <div class="dir-icon" id="dir-icon"></div>
-      <div>
-        <div class="dir-label">Next Direction</div>
-        <div class="dir-text" id="dir-text"></div>
+ 
+  <!-- Instruction plate (top) -->
+  <div class="nav-top" id="nav-top">
+    <div class="plate" id="plate">
+      <div class="plate-icon" id="dir-icon" aria-hidden="true"></div>
+      <div class="plate-body">
+        <div class="plate-text" id="dir-text" aria-live="polite"></div>
+        <div class="plate-track" id="step-track" role="img"></div>
       </div>
     </div>
-    <div class="stats-row">
-      <div class="stat"><div class="stat-val" id="s-dist">--</div><div class="stat-lbl">Distance</div></div>
-      <div class="stat"><div class="stat-val" id="s-time">--</div><div class="stat-lbl">Time</div></div>
-      <div class="stat"><div class="stat-val" id="s-step">--</div><div class="stat-lbl">Step</div></div>
-      <div class="stat"><div class="stat-val" id="s-gps">--</div><div class="stat-lbl">GPS</div></div>
-    </div>
-    <div class="steps" id="steps-container"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="openScan()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7V5a2 2 0 012-2h2M17 3h2a2 2 0 012 2v2M21 17v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
-        Scan QR
-      </button>
+  </div>
+ 
+  <!-- Route sheet (bottom) -->
+  <div class="nav-bottom" id="nav-bottom">
+    <div class="sheet" id="sheet">
+      <div class="compass" id="compass" aria-label="Compass">
+        <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle" aria-hidden="true">
+          <polygon points="14,2 19,14 14,11.5 9,14" fill="#ff5a64"/>
+          <polygon points="14,26 9,14 14,16.5 19,14" fill="#ffffff"/>
+        </svg>
+      </div>
+      <button class="sheet-grip" id="sheet-grip" onclick="toggleSheet()" aria-expanded="false" aria-controls="sheet-more" aria-label="Show route details"></button>
+      <div class="sheet-head">
+        <div class="sheet-title">
+          <div class="panel-name" id="p-name"></div>
+          <div class="panel-sub" id="p-loc"></div>
+        </div>
+        <button class="voice-btn" id="voice-btn" onclick="toggleVoice()" aria-label="Voice guide" title="Voice guide">
+          <svg id="voice-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+        </button>
+      </div>
+      <div class="metrics">
+        <div class="metric main"><span class="metric-val" id="s-dist">--</span><span class="metric-lbl">to go</span></div>
+        <div class="metric"><span class="metric-val" id="s-time">--</span><span class="metric-lbl">walking</span></div>
+        <div class="metric"><span class="metric-val" id="s-gps">--</span><span class="metric-lbl">GPS accuracy</span></div>
+      </div>
+      <div class="sheet-more" id="sheet-more">
+        <div class="sheet-more-inner">
+          <dl class="details">
+            <div class="detail"><dt>Your position</dt><dd class="gps-readout" id="gps-readout"><span>LAT --</span><span>LNG --</span><span>ALT --</span></dd></div>
+            <div class="detail"><dt>Next point</dt><dd id="target-meta">--</dd></div>
+          </dl>
+        </div>
+      </div>
     </div>
   </div>
-
+ 
   <!-- Arrival -->
-  <div class="arrival" id="arrival">
-    <div class="arrival-circle">
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-    </div>
-    <h2>You've Arrived!</h2>
-    <p id="arrival-msg"></p>
+  <div class="arrival" id="arrival" role="dialog" aria-label="Arrived">
+    <svg class="arrival-mark" viewBox="0 0 92 92" aria-hidden="true">
+      <circle cx="46" cy="46" r="42" pathLength="1"/>
+      <path d="M28 47 L41 60 L65 34" pathLength="1"/>
+    </svg>
+    <h2>You've arrived</h2>
+    <p class="arrival-msg" id="arrival-msg"></p>
     <div class="fb-area" id="fb-area">
-      <div class="fb-stars" id="fb-stars">
-        <span class="fb-star" data-star="1">&#9733;</span>
-        <span class="fb-star" data-star="2">&#9733;</span>
-        <span class="fb-star" data-star="3">&#9733;</span>
-        <span class="fb-star" data-star="4">&#9733;</span>
-        <span class="fb-star" data-star="5">&#9733;</span>
+      <div id="fb-question">
+        <div class="fb-stars" id="fb-stars" role="group" aria-label="Rate the guidance">
+          <button type="button" class="fb-star" data-star="1" aria-label="1 star">&#9733;</button>
+          <button type="button" class="fb-star" data-star="2" aria-label="2 stars">&#9733;</button>
+          <button type="button" class="fb-star" data-star="3" aria-label="3 stars">&#9733;</button>
+          <button type="button" class="fb-star" data-star="4" aria-label="4 stars">&#9733;</button>
+          <button type="button" class="fb-star" data-star="5" aria-label="5 stars">&#9733;</button>
+        </div>
+        <div class="fb-label" id="fb-label">How was the guidance?</div>
+        <div class="fb-msg-wrap">
+          <textarea class="fb-msg" id="fb-msg" rows="2" maxlength="300" placeholder="Add a note (optional)" aria-label="Feedback note"></textarea>
+          <div class="fb-count" id="fb-count">0/300</div>
+        </div>
+        <div class="fb-actions">
+          <button class="btn btn-gold fb-submit" id="fb-submit" onclick="submitFeedback()" disabled>
+            <span class="fb-spinner" id="fb-spinner"></span>
+            <svg class="fb-check" id="fb-check" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <span class="fb-submit-txt" id="fb-submit-txt">Send feedback</span>
+          </button>
+          <button class="fb-skip" onclick="skipFeedback()">Skip</button>
+        </div>
       </div>
-      <textarea class="fb-msg" id="fb-msg" rows="2" placeholder="Was this helpful? Optional message..."></textarea>
-      <br>
-      <button class="fb-submit" id="fb-submit" onclick="submitFeedback()">Send Feedback</button>
-      <button class="fb-skip" onclick="skipFeedback()">Skip</button>
-      <div class="fb-thanks" id="fb-thanks" style="display:none">Thanks for your feedback!</div>
+      <div class="fb-thanks" id="fb-thanks" style="display:none">
+        <div class="fb-thanks-inner">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>Thanks for your feedback</span>
+        </div>
+        <div class="fb-thanks-sub">Your rating helps other visitors find their way.</div>
+      </div>
     </div>
-    <button onclick="finishNavigation()">Done</button>
+    <button class="btn btn-ghost arrival-done" onclick="finishNavigation()">Done</button>
   </div>
-
-  <!-- Search Overlay -->
-  <div class="search-overlay" id="search-overlay">
-    <div class="search-header">
-      <button class="search-close" onclick="closeSearch()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <h2>Where to?</h2>
+ 
+  <!-- Search overlay (starts closed; openSearch() reveals it) -->
+  <div class="search-overlay hidden" id="search-overlay" role="dialog" aria-label="Choose a destination">
+    <div class="search-top">
+      <div class="search-bar-row">
+        <button class="search-close" id="search-close" onclick="closeSearch()" aria-label="Close search">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h2>Where to?</h2>
+      </div>
+      <label class="search-field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="search" class="search-input" id="search-input" placeholder="Building, office or code (e.g. CICS)" autocomplete="off" aria-label="Search buildings">
+      </label>
+      <div class="route-start">
+        <button type="button" class="route-start-btn active" id="start-current-btn" onclick="chooseRouteStart('current')">
+          <span>📍</span><span><b>Start from my location</b><small>Use live GPS position</small></span>
+        </button>
+        <button type="button" class="route-start-btn" id="start-building-btn" onclick="chooseRouteStart('building')">
+          <span>🏢</span><span><b>Start from a building</b><small>CICS → Admin, etc.</small></span>
+        </button>
+      </div>
+      <div class="route-source-picker" id="route-source-picker" style="display:none">
+        <label for="route-source">Starting building</label>
+        <select id="route-source" onchange="setBuildingRouteSource(this.value)"></select>
+      </div>
     </div>
-    <div class="search-input-wrap">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" class="search-input" id="search-input" placeholder="Search building, office, or location..." autocomplete="off">
-    </div>
+    <button class="search-locate" id="search-locate" onclick="useMyLocation()" title="Allow your location to sort results by distance">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+      <span id="search-locate-text">Use my location to sort by distance</span>
+    </button>
     <div class="search-results" id="search-results"></div>
   </div>
-
-
+ 
   <!-- Toast -->
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+ 
+  <!-- Launch splash (animated logo) -->
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-stage">
+      <span class="splash-halo"></span>
+      <svg viewBox="250 160 300 270">
+        <g class="sp-glow"><path class="sp-glow-line" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/></g>
+        <path class="sp-line" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+        <path class="sp-spark" pathLength="1" d="M400 203 L290 390 L342 390 L400 281 L438 351 L383 351 L403 390 L510 390 Z"/>
+      </svg>
+    </div>
+    <div class="splash-word">CSU-A AR Navigation</div>
+  </div>
 </div>
-
+ 
 <script>
 /* ================================================================
    BUILDING DATA — CSU-A Campus
    ================================================================ */
 const BUILDINGS = {
-
-  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'180m', time:'~2 min', lat:18.35120653118311, lng:121.64998763822749,
-    steps:['Start at the main entrance gate','Head straight along the main road westward','Pass the flagpole on your left','Administration Building is on your right'],
+ 
+  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'280m', time:'~4 min', lat:18.35123406520377, lng:121.64988793607472,
+    steps:['Start at the main entrance gate','Walk straight for 200m and turn left','Walk straight for 40m and turn left','Walk straight for 20m and turn right','Walk for 20m and the Administration Building is ahead'],
+    waypoints:[
+      {lat:18.351825411046327, lng:121.64978807763937, label:'Turn left'},
+      {lat:18.351461804646284, lng:121.64971911587419, label:'Turn left'},
+      {lat:18.351409532381442, lng:121.64990107264106, label:'Turn right'}
+    ],
     aliases:['admin','registrar','hrdo','guidance','finance','admission'] },
   cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'430m', time:'~5 min', lat:18.352268721573235, lng:121.64765987770043,
-    steps:['Start at the main entrance','Walk west along the main road','Continue past the junction','CTE Building is on your right'],
+    steps:['Start at the main entrance','Walk straight for 430m and CTE Building is ahead'],
     aliases:['cte','teacher','education','teaching'] },
-  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'230m', time:'~3 min', lat:18.352466469429963, lng:121.65024244013327,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road junction','Gymplex is straight ahead'],
+  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'217m', time:'~3 min', lat:18.352380544084607, lng:121.65024011381233,
+    steps:['Start at the main entrance','Walk straight for 150m and turn right','Walk straight for 50m, then bear a little left','Walk for 17m and the Gymplex is ahead'],
+    waypoints:[
+      {lat:18.351816240528287, lng:121.65027829464744, label:'Turn right'},
+      {lat:18.352266318463634, lng:121.650356714548, label:'Bear a little left'}
+    ],
     aliases:['gymplex','gym','gymnasium','sports','basketball'] },
   gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352329598700887, lng:121.6505757211261,
     steps:['Start at the main entrance','Turn left at the first intersection','Turn left again at the second intersection','Gatchalian Building is ahead – You have arrived to your destination'],
@@ -336,42 +540,50 @@ const BUILDINGS = {
       {lat:18.352278201217583, lng:121.65036764132986, label:'Second turn left'}
     ],
     aliases:['gatchalian','hall'] },
-  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'160m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right before the Gymplex junction','CICS Building is on your left'],
+  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'120m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
+    steps:['Start at the main entrance','Walk straight for 120m and CICS Building is ahead'],
     aliases:['cics','computer','it','information','computing','technology'] },
-  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'215m', time:'~3 min', lat:18.351735368388443, lng:121.64992893110352,
-    steps:['Start at the main entrance','Walk west along the main road','Library is at the road corner'],
+  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'185m', time:'~2 min', lat:18.351735368388443, lng:121.64992893110352,
+    steps:['Start at the main entrance','Walk straight for 185m and Library is ahead'],
     aliases:['library','books','study','lrc','learning'] },
   avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'168m', time:'~2 min', lat:18.351438787450356, lng:121.65031967108017,
     steps:['Start at the main entrance','Walk straight for 134m and turn left','Walk straight for 20m, then bear a little left','Walk for 14m and the AVR Building is ahead'],
+    waypoints:[
+      {lat:18.351699942197545, lng:121.65040702249051, label:'Turn left'},
+      {lat:18.351563427984562, lng:121.65028840494261, label:'Bear a little left'}
+    ],
     aliases:['avr','audio','visual','presentation','media'] },
-  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'290m', time:'~4 min', lat:18.352569667318097, lng:121.64997179523256,
-    steps:['Start at the main entrance','Walk west on the main road','Turn right at the road corner','Continue north toward the canteen','Canteen is on your left'],
+  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'265m', time:'~3 min', lat:18.35253551058823, lng:121.64998765796611,
+    steps:['Start at the main entrance','Walk straight for 191m and turn right','Walk straight for 57m, then bear a little left','Walk for 17m and the Canteen is ahead'],
+    waypoints:[
+      {lat:18.351871773158724, lng:121.64989222592551, label:'Turn right'},
+      {lat:18.35237485224993, lng:121.64999384514299, label:'Bear a little left'}
+    ],
     aliases:['canteen','food','eat','dining','court','lunch','meal'] },
-  cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'330m', time:'~4 min', lat:18.352166160870844, lng:121.6490121022558,
-    steps:['Start at the main entrance','Walk west on the main road','Continue past the Library junction','CIT Building is on your right'],
+  cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'287m', time:'~4 min', lat:18.352166160870844, lng:121.6490121022558,
+    steps:['Start at the main entrance','Walk straight for 287m and CIT Building is ahead'],
     aliases:['cit','industrial','technology','technical'] },
-  cbea:        { name:'CBEA Building', icon:'📊', loc:'West campus – College of Business & Accountancy', dist:'360m', time:'~5 min', lat:18.352309606371012, lng:121.64859456291032,
-    steps:['Start at the main entrance','Walk west on the main road','Continue past the CIT junction','CBEA Building is on your right'],
+  cbea:        { name:'CBEA Building', icon:'📊', loc:'West campus – College of Business & Accountancy', dist:'332m', time:'~4 min', lat:18.352309606371012, lng:121.64859456291032,
+    steps:['Start at the main entrance','Walk straight for 332m and CBEA Building is ahead'],
     aliases:['cbea','business','accountancy','accounting','commerce'] },
   infra:       { name:'Infrastructure Office', icon:'🏗️', loc:'Far west campus – Pond Pavilion area', dist:'522m', time:'~7 min', lat:18.35264337189176, lng:121.64714727045033,
-    steps:['Start at the main entrance','Walk straight for 455m and turn left','Walk straight for 33m and turn right','Walk for 34m and the Infrastructure Office is ahead'],
+    steps:['Start at the main entrance','Walk straight for 455m and turn right','Walk straight for 33m and turn left','Walk for 34m and the Infrastructure Office is ahead'],
     waypoints:[
-      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn left'},
-      {lat:18.35258222861205, lng:121.64748012504195, label:'Turn right'}
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn right'},
+      {lat:18.35258222861205, lng:121.64748012504195, label:'Turn left'}
     ],
     aliases:['infra','infrastructure','engineering','pond','pavilion'] },
   dnst:        { name:'DNST Building', icon:'⛰️', loc:'Hilltop campus', dist:'589m', time:'~8 min', lat:18.353480696371406, lng:121.64774568310278,
-    steps:['Start at the main entrance','Walk straight for 455m and turn left','Walk straight for 74m, then bear a little left','Walk for 60m and DNST Building is ahead'],
+    steps:['Start at the main entrance','Walk straight for 455m and turn right','Walk straight for 74m, then bear a little right','Walk for 60m and DNST Building is ahead'],
     waypoints:[
-      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn left'},
-      {lat:18.35295029908013, lng:121.64751226814704, label:'Bear a little left'}
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn right'},
+      {lat:18.35295029908013, lng:121.64751226814704, label:'Bear a little right'}
     ],
     aliases:['dnst','hilltop','mountain'] },
   oldadmin:    { name:'Old Admin Building', icon:'🏚️', loc:'West campus', dist:'490m', time:'~6 min', lat:18.35223673608025, lng:121.64742101450098,
-    steps:['Start at the main entrance','Walk straight for 455m, then bear a little right','Walk for 35m and the Old Admin Building is ahead'],
+    steps:['Start at the main entrance','Walk straight for 455m, then bear a little left','Walk for 35m and the Old Admin Building is ahead'],
     waypoints:[
-      {lat:18.35223673608025, lng:121.64742101450098, label:'Bear a little right'}
+      {lat:18.35223673608025, lng:121.64742101450098, label:'Bear a little left'}
     ],
     aliases:['oldadmin','old','administration'] },
   hatchery:    { name:'Hatchery', icon:'🐟', loc:'South-west campus – Fish Hatchery', dist:'618m', time:'~8 min', lat:18.35137294211255, lng:121.64664869451029,
@@ -412,7 +624,14 @@ const BUILDINGS = {
     ],
     aliases:['dorm','dormitory','faculty','housing','lodging'] }
 };
-
+ 
+// Short signage codes shown on the destination tiles (also searchable)
+const BUILDING_CODES = {
+  admin:'ADM', cte:'CTE', gymplex:'GYM', gatchalian:'GAT', cics:'CICS', library:'LIB',
+  avr:'AVR', canteen:'CAN', cit:'CIT', cbea:'CBEA', infra:'INF', dnst:'DNST',
+  oldadmin:'OLD', hatchery:'HAT', icrm:'ICRM', ceo_cottage:'CEO', villa1:'VL1', dorm:'DRM'
+};
+ 
 /* ================================================================
    STATE
    ================================================================ */
@@ -420,72 +639,273 @@ let stream = null;
 let arCtx = null;
 let arW = 0, arH = 0;
 let animFrame = null;
-
+ 
 let dest = null;          // current building key
-let stepIdx = 0;          // current step index
+let stepIdx = 0;          // index of the ACTIVE leg / waypoint
 let startDist = 0;        // GPS distance from first fix to destination (for step auto-advance)
-let gpsPos = null;        // {lat, lng}
+
+// Route origin mode:
+// gate = legacy QR/gate route (unchanged)
+// current = live phone GPS -> destination
+// building = selected building -> destination
+let routeMode = 'gate';
+let routeSourceKey = null;
+let activeRouteWaypoints = null;
+let activeRouteSteps = null;
+let activeRouteStart = null;
+let gpsPos = null;        // {lat, lng, acc, alt, altAcc}
 let heading = 0;          // smoothed compass heading degrees
 let rawHeading = -1;      // last raw compass reading (for smoothing)
-let bearing = 0;          // bearing to destination degrees
-let distToDest = 0;       // metres
+let cameraPitch = 0;      // camera optical-axis pitch relative to the horizon
+let rawPitch = null;
+let bearing = 0;          // bearing to ACTIVE waypoint degrees
+let distToDest = 0;       // metres to final destination
+let distToTarget = 0;     // metres to ACTIVE waypoint
+let verticalAngle = 0;    // elevation angle to ACTIVE waypoint
+let targetAltitude = null;
+let elevationRequestId = 0;
 let userSpeed = 1.4;      // walking speed m/s estimate
 let lastGpsTime = 0;
 let lastGpsDist = 0;
 let gpsWatchId = null;
 let gpsRetries = 0;       // consecutive GPS failures before retry
+let gpsAsked = false;     // true once location permission has been requested
 const GPS_MAX_RETRIES = 6;
 let orientationListener = null;
+let compassInstalled = false;  // true once the orientation listener is attached
 let arrived = false;
-
+ 
+// Voice guide (text-to-speech step announcements)
+let voiceOn = true;
+let voicesReady = false;
+ 
 // AR animation state
 let arTime = 0;
-let arBob = 0;
 let arrowRotation = 0;    // smooth target rotation
 let currentArrowRot = 0;  // interpolated
-
-// QR scanning
-let barcodeDetector = null;
-let scanning = false;
-let scanCanvas, scanCtx;
-
+let arCy = 0;             // vertical centre of the AR marker (sits between the plate and the sheet)
+let arCyTarget = 0;
+let arFrame = 0;
+const REDUCED_MOTION = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+ 
+/* ================================================================
+   LAUNCH SPLASH — plays once per browser tab, tap to skip
+   ================================================================ */
+(function initSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  let seen = false;
+  try { seen = sessionStorage.getItem('csua-splash') === '1'; } catch (e) {}
+  if (seen) { el.remove(); return; }
+  try { sessionStorage.setItem('csua-splash', '1'); } catch (e) {}
+  const dismiss = () => {
+    el.classList.add('hidden');
+    setTimeout(() => el.remove(), 700);
+  };
+  el.addEventListener('click', dismiss);
+  setTimeout(dismiss, REDUCED_MOTION ? 900 : 3400);
+})();
+ 
 /* ================================================================
    INIT
    ================================================================ */
 window.addEventListener('load', async () => {
   const params = new URLSearchParams(location.search);
   const d = params.get('dest');
-
+ 
   if (d && BUILDINGS[d]) {
     // iOS Safari blocks camera + GPS unless triggered by a user tap.
     const gate = document.getElementById('start-gate');
     gate.style.display = 'flex';
+    // If location was allowed on a previous visit, open it automatically.
+    tryAutoGPS(false);
   } else {
-    // Entry without a direct link: show the destination search first.
-    // Start a lightweight GPS fix so results can sort by real distance.
-    startGPS();
+    // Entry without a direct link: show the destination search first and let
+    // the user start location themselves (Locate me button / picking a result),
+    // so the search screen is not blocked by a permission pop-up. If location
+    // was already allowed, tracking starts automatically right away.
+    if (gpsPos) renderSearchResults('');
     hideLoading();
     openSearch();
   }
+ 
+  // Show the camera / location permission state up front so users know whether
+  // the browser will ask, already allowed it, or has it blocked.
+  checkPermissionStates();
 });
-
+ 
+function tryAutoGPS(showPrompt) {
+  if (!navigator.geolocation) return;
+  if (typeof navigator.permissions !== 'undefined' && typeof navigator.permissions.query === 'function') {
+    navigator.permissions.query({ name: 'geolocation' }).then(s => {
+      if (s.state === 'granted') {
+        startGPS();                 // already allowed -> open the location automatically
+      } else if (s.state === 'prompt' && showPrompt) {
+        showGpsGate();              // needs a tap -> ask for permission
+      }
+    }).catch(() => {});
+  }
+}
+ 
+function showGpsGate() {
+  document.getElementById('gps-gate').style.display = 'flex';
+}
+ 
+function dismissGpsGate() {
+  document.getElementById('gps-gate').style.display = 'none';
+}
+ 
+function allowGps() {
+  dismissGpsGate();
+  startGPS(); // called inside the button's tap so the permission dialog appears
+}
+ 
+function updateGpsDisplay() {
+  const el = document.getElementById('s-gps');
+  if (el) el.textContent = gpsPos ? (gpsPos.acc ? '±' + Math.round(gpsPos.acc) + 'm' : 'GPS') : 'Locating…';
+}
+ 
 function hideLoading() {
   document.getElementById('loading').classList.add('hidden');
 }
-
-async function beginFromGate() {
+ 
+async function queryPerm(name) {
+  try {
+    if (!navigator.permissions || !navigator.permissions.query) return 'unsupported';
+    const s = await navigator.permissions.query({ name });
+    return s.state;
+  } catch (e) {
+    return 'unsupported';
+  }
+}
+ 
+function setPermStatus(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (state === 'granted') { el.textContent = 'Allowed'; el.dataset.state = 'granted'; }
+  else if (state === 'denied') { el.textContent = 'Blocked'; el.dataset.state = 'denied'; }
+  else { el.textContent = 'Will ask'; el.dataset.state = 'prompt'; }
+}
+ 
+async function checkPermissionStates() {
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+ 
+  const hint = document.getElementById('gate-hint');
+  if (!hint) return;
+  const bad = [];
+  if (cam === 'denied') bad.push('Camera is blocked');
+  if (loc === 'denied') bad.push('Location is blocked');
+  if (bad.length) {
+    hint.innerHTML = bad.join(' and ') + '. Open Chrome ▸ ⋮ ▸ Site settings to allow, then tap Allow.';
+  } else if (cam === 'granted' && loc === 'granted') {
+    hint.innerHTML = 'Camera and location are already allowed. Chrome won\'t ask again, so tap Allow to open AR.';
+  }
+}
+ 
+function enterFromGate() {
   const gate = document.getElementById('start-gate');
   if (gate) gate.style.display = 'none';
   const params = new URLSearchParams(location.search);
   const d = params.get('dest');
-  await initCamera();
-  if (!dest && d && BUILDINGS[d]) setDestination(d);
+  const start = params.get('start');
+  if (start === 'current') routeMode = 'current';
+  else if (start && BUILDINGS[start]) { routeMode = 'building'; routeSourceKey = start; }
+  else routeMode = 'gate';
+  if (!dest && d && BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
 }
-
+ 
+const GATE_BTN_HTML =
+  '<button class="btn btn-ghost" onclick="blockPermissions()">Block</button>' +
+  '<button class="btn btn-gold" onclick="allowPermissions()">Allow</button>';
+ 
+function resetGateButtons(hintText) {
+  const btns = document.getElementById('gate-btns');
+  if (btns) btns.innerHTML = GATE_BTN_HTML;
+  const hint = document.getElementById('gate-hint');
+  if (hint) hint.innerHTML = hintText || '';
+}
+ 
+function retryPerms() {
+  resetGateButtons('Please allow the Camera and Location prompts your browser shows.');
+  setPermStatus('perm-camera', 'prompt');
+  setPermStatus('perm-location', 'prompt');
+  allowPermissions();
+}
+ 
+function showGateFailure(camOK, locState) {
+  const missing = [];
+  if (!camOK) missing.push('Camera');
+  if (locState !== 'granted') missing.push('Location/GPS');
+  const btns = document.getElementById('gate-btns');
+  if (btns) {
+    btns.innerHTML =
+      '<button class="btn btn-ghost" onclick="enterFromGate()">Continue anyway</button>' +
+      '<button class="btn btn-gold" onclick="retryPerms()">Retry</button>';
+  }
+  const hint = document.getElementById('gate-hint');
+  if (hint) {
+    hint.innerHTML =
+      '<b>' + missing.join(' and ') + ' is not allowed.</b><br>' +
+      'To be asked again, open Chrome ▸ ⋮ ▸ Site settings ▸ ' + (missing.join(' / ')) + ' ▸ "Ask first" or Allow.<br>' +
+      '<small>Once allowed, Chrome remembers it and will not re-ask.</small>';
+  }
+  showToast('Allow camera & location to start AR');
+}
+ 
+function blockPermissions() {
+  setPermStatus('perm-camera', 'denied');
+  setPermStatus('perm-location', 'denied');
+  const btns = document.getElementById('gate-btns');
+  if (btns) {
+    btns.innerHTML =
+      '<button class="btn btn-ghost" onclick="enterFromGate()">Continue without</button>' +
+      '<button class="btn btn-gold" onclick="retryPerms()">I want to allow</button>';
+  }
+  const hint = document.getElementById('gate-hint');
+  if (hint) {
+    hint.innerHTML = 'You blocked camera and location. AR needs both to guide you.<br>' +
+      'Tap "I want to allow" to enable them, or "Continue without" for step-by-step text directions only.';
+  }
+}
+ 
+async function allowPermissions() {
+  const hint = document.getElementById('gate-hint');
+  if (hint) hint.textContent = 'Please allow the Camera and Location prompts your browser shows.';
+ 
+  // 1) Ask for location SYNCHRONOUSLY inside this tap. iOS/Android hide the
+  //    permission dialog if geolocation is requested after the async camera
+  //    setup, so the GPS prompt must happen before the await below.
+  startGPS();
+ 
+  // 1b) Ask for the compass (device orientation) in the same tap so the
+  //    navigation arrow can rotate on iOS too.
+  requestCompassPermission();
+ 
+  // 2) Camera permission (the dialog queues behind the location one on iOS).
+  const camOK = await initCamera();
+ 
+  // Show what actually happened after the browser prompts appear.
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+ 
+  if (camOK && loc === 'granted') {
+    // Everything allowed — open AR navigation automatically.
+    enterFromGate();
+    return;
+  }
+ 
+  showGateFailure(camOK, loc);
+}
+ 
 async function initCamera() {
   const loading = document.getElementById('loading');
   const noCam = document.getElementById('no-cam');
-
+ 
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} },
@@ -494,19 +914,16 @@ async function initCamera() {
     const video = document.getElementById('camera-feed');
     video.srcObject = stream;
     await video.play();
-
+ 
     const canvas = document.getElementById('ar-canvas');
     arCtx = canvas.getContext('2d');
     handleResize();
     window.addEventListener('resize', handleResize);
-
-    renderLoop();
+ 
+    if (!animFrame) renderLoop();
     loading.classList.add('hidden');
     noCam.style.display = 'none';
     document.getElementById('topbar').style.display = 'flex';
-
-    // Try init barcode detector
-    tryInitBarcodeDetector();
     return true;
   } catch (e) {
     console.error('Camera init failed:', e);
@@ -523,7 +940,7 @@ async function initCamera() {
     return false;
   }
 }
-
+ 
 function openInBrowser() {
   const url = location.href;
   // Android: use intent to open in Chrome
@@ -539,11 +956,11 @@ function openInBrowser() {
     reason.innerHTML = '<strong>On iPhone:</strong> Tap the Share button (square+arrow) → "Open in Safari"<br><strong>On Android:</strong> Tap the 3-dot menu → "Open in Chrome"';
   }
 }
-
+ 
 function handleResize() {
   const dpr = window.devicePixelRatio || 1;
   arW = window.innerWidth;
-  arH = window.innerHeight;
+  arH = Math.floor(window.innerHeight); // AR camera is full screen
   const c = document.getElementById('ar-canvas');
   c.width = arW * dpr;
   c.height = arH * dpr;
@@ -551,7 +968,7 @@ function handleResize() {
   c.style.height = arH + 'px';
   if (arCtx) arCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-
+ 
 /* ================================================================
    GPS TRACKING
    ================================================================ */
@@ -561,377 +978,233 @@ function startGPS() {
     showToast('GPS not supported on this device');
     return;
   }
+  if (gpsAsked) return; // already requested / tracking
+  gpsAsked = true;
   gpsRetries = 0;
-  watchGPS();
+ 
+  // Show that we are trying to open the location automatically.
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show');
+  dot.classList.remove('on');
+  updateGpsDisplay();
+ 
+  // One-shot request first: this triggers the location permission dialog while
+  // we are still inside the user gesture that called startGPS() (iOS will not
+  // show it otherwise). Once the user grants access and we have the first fix
+  // we switch to continuous tracking via watchGPS().
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      onGpsCoords(pos.coords);
+      watchGPS();
+    },
+    err => {
+      if (err && err.code === 1) {
+        onGpsError(err);
+      } else {
+        // No fix yet / timeout — still try continuous tracking; the permission
+        // prompt (if any) has already been shown, so watchPosition is safe now.
+        watchGPS();
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+  );
 }
-
+ 
+function onGpsCoords(c) {
+  gpsRetries = 0;
+  const now = Date.now();
+  const newLat = c.latitude;
+  const newLng = c.longitude;
+  const newAcc = Number.isFinite(c.accuracy) ? c.accuracy : 999;
+ 
+  // Ignore impossible/clearly unusable fixes instead of letting them jump the
+  // route or falsely trigger a waypoint.
+  if (!Number.isFinite(newLat) || !Number.isFinite(newLng) ||
+      Math.abs(newLat) > 90 || Math.abs(newLng) > 180) return;
+ 
+  if (gpsPos) {
+    const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
+    const dt = (now - lastGpsTime) / 1000;
+    if (dt > 0 && d > 2) {
+      const measured = d / dt;
+      if (measured >= 0.3 && measured <= 3.0) {
+        userSpeed = userSpeed * 0.75 + measured * 0.25;
+      }
+    }
+  }
+ 
+  gpsPos = {
+    lat: newLat,
+    lng: newLng,
+    acc: newAcc,
+    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? c.altitude : null,
+    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined && isFinite(c.altitudeAccuracy)) ? c.altitudeAccuracy : null
+  };
+ 
+  const readout = document.getElementById('gps-readout');
+  if (readout) {
+    const altText = Number.isFinite(gpsPos.alt) ? gpsPos.alt.toFixed(1) + ' m' : '--';
+    readout.innerHTML =
+      '<span>LAT ' + gpsPos.lat.toFixed(6) + '</span>' +
+      '<span>LNG ' + gpsPos.lng.toFixed(6) + '</span>' +
+      '<span>ALT ' + altText + '</span>';
+  }
+  lastGpsTime = now;
+ 
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show', 'on');
+ 
+  // A fix arrived — hide the permission gate and show the live accuracy.
+  dismissGpsGate();
+  updateGpsDisplay();
+ 
+  if (!startDist && dest) {
+    startDist = haversine(newLat, newLng, BUILDINGS[dest].lat, BUILDINGS[dest].lng);
+  }
+ 
+  if (dest) updateDistanceAndBearing();
+ 
+  // Live re-sort of any open search results by real distance.
+  const searchOverlay = document.getElementById('search-overlay');
+  if (searchOverlay && !searchOverlay.classList.contains('hidden')) {
+    const input = document.getElementById('search-input');
+    renderSearchResults(input.value);
+  }
+}
+ 
+function onGpsError(err) {
+  console.warn('GPS error:', err && err.code, err && err.message);
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show');
+  dot.classList.remove('on');
+  if (err && err.code === 1) {
+    showToast('Location permission blocked. Enable Location for your browser.');
+  } else if (gpsRetries < GPS_MAX_RETRIES) {
+    gpsRetries++;
+    setTimeout(watchGPS, 3000);
+  } else {
+    showToast('Weak GPS signal. Move to an open area and follow the steps.');
+  }
+}
+ 
 function watchGPS() {
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
   }
   gpsWatchId = navigator.geolocation.watchPosition(
-    pos => {
-      gpsRetries = 0;
-      const now = Date.now();
-      const newLat = pos.coords.latitude;
-      const newLng = pos.coords.longitude;
-      const newAcc = pos.coords.accuracy;
-
-      if (gpsPos) {
-        const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
-        const dt = (now - lastGpsTime) / 1000;
-        if (dt > 0 && d > 2) {
-          userSpeed = d / dt;
-        }
-      }
-
-      gpsPos = { lat: newLat, lng: newLng, acc: newAcc };
-      lastGpsTime = now;
-
-      const dot = document.getElementById('gps-dot');
-      dot.classList.add('show', 'on');
-
-      if (!startDist && dest) {
-        startDist = haversine(newLat, newLng, BUILDINGS[dest].lat, BUILDINGS[dest].lng);
-      }
-
-      if (dest) updateDistanceAndBearing();
-    },
-    err => {
-      console.warn('GPS error:', err.code, err.message);
-      const dot = document.getElementById('gps-dot');
-      dot.classList.add('show');
-      dot.classList.remove('on');
-      if (err.code === 1) {
-        showToast('Location permission blocked. Enable Location for your browser.');
-      } else if (gpsRetries < GPS_MAX_RETRIES) {
-        gpsRetries++;
-        setTimeout(watchGPS, 3000);
-      } else {
-        showToast('Weak GPS signal. Move to an open area and follow the steps.');
-      }
-    },
+    pos => onGpsCoords(pos.coords),
+    err => onGpsError(err),
     { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
   );
 }
-
+ 
 function stopGPS() {
   if (gpsWatchId !== null) {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
   }
 }
-
+ 
 function updateArrowRotation() {
   if (!gpsPos || !dest) return;
   const diff = normalizeAngle(bearing - heading);
   arrowRotation = (diff * Math.PI) / 180;
 }
-
-// Ordered navigation points for a building: every GPS turn waypoint, then the
-// destination itself. Step i (i>=1) is reached when you arrive at points[i-1].
-function routePoints(b) {
-  const pts = (b.waypoints || []).map(w => ({ lat: w.lat, lng: w.lng }));
-  pts.push({ lat: b.lat, lng: b.lng });
-  return pts;
-}
-
-// GPS target the arrow should aim at for the current step: the next UNREACHED
-// route point, so the arrow guides you along the road instead of straight at
-// the building across fields/buildings.
-function currentStepTarget(b, points) {
-  const pts = points || routePoints(b);
-  const i = Math.min(stepIdx, pts.length - 1);
-  return pts[i];
-}
-
-// Remaining road distance to the destination measured along the waypoint path:
-// straight-line distance to the current target + every following segment.
-function remainingRouteMeters(b, points) {
-  const pts = points || routePoints(b);
-  if (pts.length === 0) return haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-  const i = Math.min(stepIdx, pts.length - 1);
-  let total = haversine(gpsPos.lat, gpsPos.lng, pts[i].lat, pts[i].lng);
-  for (let k = i; k < pts.length - 1; k++) {
-    total += haversine(pts[k].lat, pts[k].lng, pts[k + 1].lat, pts[k + 1].lng);
-  }
-  return total;
-}
-
-function updateDistanceAndBearing() {
-  if (!gpsPos || !dest) return;
+ 
+// Each waypoint is a real WGS84 coordinate. The active target changes only after
+// the user's live GPS fix enters the waypoint's acceptance radius.
+function getRouteWaypoints() {
+  if (Array.isArray(activeRouteWaypoints)) return activeRouteWaypoints;
   const b = BUILDINGS[dest];
-
-  // Targets are the GPS turn waypoints (if any) plus the destination.
-  const points = (b.waypoints && b.waypoints.length > 0)
-    ? routePoints(b)
-    : [{ lat: b.lat, lng: b.lng }];
-
-  distToDest = remainingRouteMeters(b, points);
-  // Arrow points at the next waypoint so the user follows the actual route.
-  const tgt = currentStepTarget(b, points);
-  bearing = calcBearing(gpsPos.lat, gpsPos.lng, tgt.lat, tgt.lng);
-
-  // Update stats
-  document.getElementById('s-dist').textContent = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km';
-  const eta = Math.max(1, Math.round(distToDest / userSpeed / 60));
-  document.getElementById('s-time').textContent = '~' + eta + ' min';
-  document.getElementById('s-gps').textContent = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : '--';
-
-  // Arrow rotation: difference between compass heading and bearing to destination
-  updateArrowRotation();
-
-  // Auto-advance steps based on reaching each waypoint
-  autoAdvanceByDistance(points);
-
-  // Arrival check
-  if (distToDest < 20 && !arrived) {
-    triggerArrival();
-  }
+  return b ? (b.waypoints || []) : [];
 }
 
-function autoAdvanceByDistance(points) {
-  if (!dest || arrived || !gpsPos) return;
+function getRouteSteps() {
+  if (Array.isArray(activeRouteSteps) && activeRouteSteps.length) return activeRouteSteps;
   const b = BUILDINGS[dest];
-  const totalSteps = b.steps.length;
-  if (totalSteps <= 1) return;
-
-  // Waypoint-driven auto-advance: when you are close to (or have walked past)
-  // the current target, move to the next step.
-  if (points && points.length > 1) {
-    const i = Math.min(stepIdx, points.length - 1);
-    const dNow = haversine(gpsPos.lat, gpsPos.lng, points[i].lat, points[i].lng);
-    let newStep = stepIdx;
-    if (stepIdx < totalSteps - 1) {
-      const nextIdx = Math.min(i + 1, points.length - 1);
-      const dNext = haversine(gpsPos.lat, gpsPos.lng, points[nextIdx].lat, points[nextIdx].lng);
-      // Within 12m of the turn, or already closer to the next point -> walk past it.
-      if (dNow < 12 || dNext < dNow) {
-        newStep = Math.min(stepIdx + 1, totalSteps - 1);
-      }
-    }
-
-    if (newStep > stepIdx) {
-      stepIdx = newStep;
-      refreshUI();
-      showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
-    }
-    return;
-  }
-
-  // Fallback (no waypoints): percentage-based auto-advance.
-  const total = startDist || parseFloat(b.dist) || 200;
-  if (total <= 0) return;
-  const remainingFraction = distToDest / total;
-
-  const thresholds = [0.95, 0.7, 0.45, 0.25, 0.1];
-  const maxStep = Math.min(totalSteps - 1, thresholds.length);
-
-  let newStep = 0;
-  for (let i = 0; i < maxStep; i++) {
-    if (remainingFraction < thresholds[i]) newStep = i + 1;
-  }
-  newStep = Math.min(newStep, totalSteps - 1);
-
-  if (newStep > stepIdx) {
-    stepIdx = newStep;
-    refreshUI();
-    showToast('Step ' + (stepIdx + 1) + ': ' + b.steps[stepIdx]);
-    if (stepIdx >= totalSteps - 1 && distToDest < 60) {
-      triggerArrival();
-    }
-  }
+  return b ? b.steps : [];
 }
 
-function triggerArrival() {
-  arrived = true;
-  resetFeedbackUI();
+// The active target is always a real WGS84 coordinate. For dynamic routes,
+// the destination is the final target and there are no gate-only waypoints.
+function targetForStep() {
   const b = BUILDINGS[dest];
-  document.getElementById('arrival-msg').textContent = 'You have reached ' + b.name;
-  document.getElementById('arrival').classList.add('show');
-  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-  showToast('You have arrived!');
+  if (!b) return null;
+  const wps = getRouteWaypoints();
+  const idx = Math.min(stepIdx, wps.length);
+  return idx < wps.length ? wps[idx] : b;
 }
 
-/* ================================================================
-   COMPASS / ORIENTATION
-   ================================================================ */
-// Tilt-compensated compass heading from the W3C DeviceOrientation spec:
-// heading of the horizontal component of the vector pointing out the back of the screen.
-// Correct in any orientation (portrait/landscape/flat), unlike (360 - alpha),
-// which only works when the device is held flat.
-function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
-  const d2r = Math.PI / 180;
-  const x = betaDeg * d2r;
-  const y = gammaDeg * d2r;
-  const z = alphaDeg * d2r;
-  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
-  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
-  let Vx = -cZ * sY - sZ * sX * cY;
-  let Vy = -sZ * sY + cZ * sX * cY;
-  let h = Math.atan(Vx / Vy);
-  if (Vy < 0) h += Math.PI;
-  else if (Vx < 0) h += 2 * Math.PI;
-  return (h * (180 / Math.PI) + 360) % 360;
+function legText(i) {
+  const steps = getRouteSteps();
+  return steps[Math.min(i + 1, Math.max(0, steps.length - 1))] || ('Continue to ' + (BUILDINGS[dest]?.name || 'destination'));
 }
 
-function startCompass() {
-  let hasPermission = false;
-
-  // iOS 13+ requires permission
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then(state => {
-      if (state === 'granted') installOrientationListener();
-    }).catch(() => {});
-  } else {
-    installOrientationListener();
-  }
+function getTargetAltitude(t) {
+  if (!t) return null;
+  if (Number.isFinite(t.alt)) return t.alt;
+  const b = BUILDINGS[dest];
+  if (b && Number.isFinite(b.alt)) return b.alt;
+  return null;
 }
 
-function installOrientationListener() {
-  orientationListener = e => {
-    let h = 0;
-    if (e.webkitCompassHeading !== undefined) {
-      h = e.webkitCompassHeading; // iOS (and Chrome on Android) — works held upright
-    } else if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
-      h = tiltCompassHeading(e.alpha, e.beta, e.gamma); // any orientation
-      if (!isFinite(h) || (Math.abs(e.beta) < 10 && Math.abs(e.gamma) < 10)) {
-        return; // device essentially flat — heading undefined/noisy, keep last good reading
-      }
-    }
-    // Smooth short-term jitter using the nearest arc so 359°->1° stays smooth
-    if (rawHeading >= 0) {
-      heading = heading + normalizeAngle(h - heading) * 0.35;
-    } else {
-      heading = h;
-    }
-    heading = (heading + 360) % 360;
-    rawHeading = h;
-
-    const needle = document.getElementById('compass-needle');
-    if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
-
-    // Re-point the arrow immediately as the phone turns (not just on GPS fixes)
-    if (gpsPos && dest) updateArrowRotation();
-  };
-  window.addEventListener('deviceorientation', orientationListener, true);
-  document.getElementById('compass').classList.add('show');
-}
-
-function stopCompass() {
-  if (orientationListener) {
-    window.removeEventListener('deviceorientation', orientationListener, true);
-    orientationListener = null;
-  }
-}
-
-/* ================================================================
-   QR SCANNING
-   ================================================================ */
-async function tryInitBarcodeDetector() {
-  if ('BarcodeDetector' in window) {
-    try {
-      const fmts = await BarcodeDetector.getSupportedFormats();
-      if (fmts.includes('qr_code')) {
-        barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
-      }
-    } catch(e) {}
-  }
-  // Fallback canvas for jsQR
-  scanCanvas = document.getElementById('scan-canvas');
-  scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
-}
-
-function openScan() {
-  document.getElementById('scan-overlay').classList.remove('hidden');
-  document.getElementById('manual-input').value = '';
-  document.getElementById('manual-input').focus();
-  scanning = true;
-  scanLoop();
-}
-
-function closeScan() {
-  document.getElementById('scan-overlay').classList.add('hidden');
-  scanning = false;
-}
-
-async function scanLoop() {
-  if (!scanning) return;
-
-  // Try BarcodeDetector first
-  if (barcodeDetector) {
-    try {
-      const video = document.getElementById('camera-feed');
-      const barcodes = await barcodeDetector.detect(video);
-      if (barcodes.length > 0) {
-        handleScanData(barcodes[0].rawValue);
-        return;
-      }
-    } catch(e) {}
-  }
-
-  // Fallback: canvas pixel scan (basic pattern match)
-  // We just keep looping until BarcodeDetector works or manual entry
-  if (scanning) requestAnimationFrame(scanLoop);
-}
-
-function handleScanData(raw) {
-  let key = extractBuildingKey(raw);
-  if (key && BUILDINGS[key]) {
-    scanning = false;
-    if (navigator.vibrate) navigator.vibrate(100);
-    closeScan();
-    setDestination(key);
-    showToast('Navigating to ' + BUILDINGS[key].name);
-  }
-}
-
-function extractBuildingKey(text) {
-  let s = text.toLowerCase().trim();
-  // csu-ar://admin
-  if (s.startsWith('csu-ar://')) s = s.slice(9);
-  // http://domain/ar_navigation.html?dest=admin
-  if (s.startsWith('http')) {
-    try {
-      const u = new URL(text);
-      const d = u.searchParams.get('dest');
-      if (d) return d;
-    } catch(e) {}
-    s = s.split('?')[0].split('/').pop();
-  }
-  // csu-ar:admin
-  if (s.startsWith('csu-ar:')) s = s.slice(7);
-  // Clean up
-  s = s.split('?')[0].split('/').pop().replace(/[^a-z0-9_]/g, '');
-  return s || null;
-}
-
-function manualNavigate() {
-  const input = document.getElementById('manual-input').value.toLowerCase().trim();
-  if (input && BUILDINGS[input]) {
-    scanning = false;
-    closeScan();
-    setDestination(input);
-    showToast('Navigating to ' + BUILDINGS[input].name);
-  } else if (input) {
-    showToast('Building "' + input + '" not found');
-  }
-}
-
-// Handle Enter key on manual input
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('manual-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') manualNavigate();
-  });
-});
-
-/* ================================================================
-   DESTINATION / NAVIGATION
-   ================================================================ */
-function setDestination(key) {
+function buildDynamicRoute(key) {
   const b = BUILDINGS[key];
   if (!b) return;
+
+  // Current GPS is the true origin. A selected building is a fixed origin.
+  let source = null;
+  let sourceName = '';
+
+  if (routeMode === 'current') {
+    if (!gpsPos) {
+      showToast('Waiting for your GPS position…');
+      startGPS();
+      return false;
+    }
+    source = {
+      lat: gpsPos.lat, lng: gpsPos.lng,
+      alt: Number.isFinite(gpsPos.alt) ? gpsPos.alt : null
+    };
+    sourceName = 'Your current location';
+  } else if (routeMode === 'building') {
+    const sb = BUILDINGS[routeSourceKey];
+    if (!sb || routeSourceKey === key) {
+      showToast(routeSourceKey === key ? 'Choose a different starting building' : 'Choose a starting building');
+      return false;
+    }
+    source = {lat: sb.lat, lng: sb.lng, alt: Number.isFinite(sb.alt) ? sb.alt : null};
+    sourceName = sb.name;
+  }
+
+  activeRouteStart = source;
+  activeRouteWaypoints = []; // dynamic routes do not reuse gate-only waypoints
+  activeRouteSteps = [
+    'Starting from ' + sourceName,
+    'Walk toward ' + b.name + ' using the live AR direction',
+    'You have arrived at ' + b.name
+  ];
+
+  // Keep the source visible in the route details.
+  return true;
+}
+
+function setDestination(key, options = {}) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  if (options.mode) routeMode = options.mode;
+  if (options.sourceKey !== undefined) routeSourceKey = options.sourceKey;
+
+  // Preserve the original QR/gate behavior unless a new route mode was chosen.
+  if (routeMode === 'gate') {
+    activeRouteWaypoints = b.waypoints || [];
+    activeRouteSteps = b.steps || [];
+    activeRouteStart = null;
+  } else if (!buildDynamicRoute(key)) {
+    return;
+  }
 
   dest = key;
   stepIdx = 0;
@@ -939,117 +1212,135 @@ function setDestination(key) {
   arrived = false;
   arrowRotation = 0;
   currentArrowRot = 0;
+  targetAltitude = null;
+  verticalAngle = 0;
 
   setDestinationUI(key);
-  startMinimap();
+  if (gpsPos) updateDistanceAndBearing();
+  loadRouteElevations(key);
 
-  // Update URL
   const u = new URL(location);
   u.searchParams.set('dest', key);
+  if (routeMode !== 'gate') {
+    u.searchParams.set('start', routeMode === 'current' ? 'current' : routeSourceKey);
+  } else {
+    u.searchParams.delete('start');
+  }
   history.replaceState({}, '', u);
 
-  // Start GPS + compass
   startGPS();
   startCompass();
+
+  speak('Navigating to ' + b.name + '. ' + legText(0));
 }
 
 function setDestinationUI(key) {
   const b = BUILDINGS[key];
   if (!b) return;
-
-  document.getElementById('topbar-title').textContent = b.name;
-  document.getElementById('topbar-badge').textContent = 'NAVIGATING';
+ 
+  document.getElementById('topbar-badge').textContent = 'Navigating';
   document.getElementById('topbar-badge').classList.add('active');
-  document.getElementById('p-name').textContent = b.icon + ' ' + b.name;
-  document.getElementById('p-sub').innerHTML = '<span class="icon">📍</span> ' + b.loc;
-  document.getElementById('s-dist').textContent = b.dist;
+  document.getElementById('p-name').textContent = b.name;
+  document.getElementById('p-loc').textContent = b.loc;
+  document.getElementById('s-dist').textContent = b.dist.replace(/m$/, ' m');
   document.getElementById('s-time').textContent = b.time;
-  document.getElementById('s-step').textContent = '1/' + b.steps.length;
-  document.getElementById('s-gps').textContent = gpsPos ? Math.round(gpsPos.acc || 0) + 'm' : 'No GPS';
-
+  document.getElementById('s-gps').textContent = gpsPos ? '±' + Math.round(gpsPos.acc || 0) + 'm' : 'No GPS';
+ 
   refreshUI();
-
-  document.getElementById('bottom-panel').classList.add('show');
+ 
+  document.getElementById('nav-top').classList.add('show');
+  document.getElementById('nav-bottom').classList.add('show');
   document.getElementById('compass').classList.add('show');
 }
-
+ 
+// Pictograms for the instruction plate (drawn with currentColor)
+const TURN_ICONS = {
+  straight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V4M5.5 10.5L12 4l6.5 6.5"/></svg>',
+  left:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-7a4 4 0 0 0-4-4H5"/><path d="M9 5.5L4.5 10 9 14.5"/></svg>',
+  right:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21v-7a4 4 0 0 1 4-4h7"/><path d="M15 5.5L19.5 10 15 14.5"/></svg>'
+};
+ 
 function refreshUI() {
   if (!dest) return;
   const b = BUILDINGS[dest];
-
-  // Direction card
-  const step = b.steps[stepIdx];
-  const dirColors = ['#dbeafe','#dcfce7','#fef3c7','#fce7f3','#ede9fe','#e0e7ff','#ccfbf1','#fef9c3'];
-  const dirStrokes = ['#1a56db','#059669','#d97706','#db2777','#7c3aed','#4338ca','#0d9488','#a16207'];
-  const ci = stepIdx % dirColors.length;
-  document.getElementById('dir-icon').style.background = dirColors[ci];
-
-  // Direction arrow SVG based on step context
-  const arrowSVGs = [
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>',
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>',
-  ];
-  const dirIdx = stepIdx % arrowSVGs.length;
-  document.getElementById('dir-icon').innerHTML = arrowSVGs[dirIdx].replace('STROKE', dirStrokes[ci]);
+ 
+  // Instruction plate: the real turn (left / right / straight) plus leg progress
+  const step = legText(stepIdx);
   document.getElementById('dir-text').textContent = step;
-
-  // Stats
-  document.getElementById('s-step').textContent = (stepIdx + 1) + '/' + b.steps.length;
-
-  // Steps list
-  const container = document.getElementById('steps-container');
-  container.innerHTML = b.steps.map((s, i) => {
-    let cls = '';
-    if (i < stepIdx) cls = 'done';
-    else if (i === stepIdx) cls = 'current';
-    return '<div class="step ' + cls + '"><div class="step-num">' + (i < stepIdx ? '✓' : (i+1)) + '</div><div class="step-txt">' + s + '</div></div>';
-  }).join('');
-
-  // Scroll to current step
-  const currentEl = container.querySelector('.step.current');
-  if (currentEl) currentEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
-
+ 
+  const t = step.toLowerCase();
+  const turn = /\bleft\b/.test(t) ? 'left' : (/\bright\b/.test(t) ? 'right' : 'straight');
+  document.getElementById('dir-icon').innerHTML = TURN_ICONS[turn];
+ 
+  const legs = Math.max(1, b.steps.length - 1);
+  const cur = Math.min(stepIdx, legs - 1);
+  let seg = '';
+  for (let i = 0; i < legs; i++) {
+    seg += '<i class="' + (i < cur ? 'done' : (i === cur ? 'now' : '')) + '"></i>';
+  }
+  const track = document.getElementById('step-track');
+  track.innerHTML = seg;
+  track.setAttribute('aria-label', 'Step ' + (cur + 1) + ' of ' + legs);
+ 
+  const target = targetForStep();
+  const targetMeta = document.getElementById('target-meta');
+  if (targetMeta && target) {
+    const alt = Number.isFinite(target.alt) ? ' · ' + target.alt.toFixed(1) + ' m' : '';
+    targetMeta.textContent = target.lat.toFixed(6) + ', ' + target.lng.toFixed(6) + alt;
+  }
+ 
   if (!gpsPos) {
-    // Without GPS, estimate remaining distance from the current step onward.
+    // Without GPS, estimate remaining distance from the current leg onward.
     let remaining = 0;
-    for (let i = stepIdx; i < b.steps.length; i++) {
+    for (let i = stepIdx + 1; i < b.steps.length; i++) {
       const m = /(\d+)m/i.exec(b.steps[i]);
       if (m) remaining += parseInt(m[1], 10);
     }
-    // Step 0 ("Start at the main entrance") has no length; fall back on declared dist.
     if (remaining === 0) {
-      remaining = Math.max(1, b.steps.length - stepIdx) * 50;
+      remaining = Math.max(1, b.steps.length - 1 - stepIdx) * 50;
     }
-    document.getElementById('s-dist').textContent = Math.round(remaining) + 'm';
+    document.getElementById('s-dist').textContent = Math.round(remaining) + ' m';
     document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining / (userSpeed * 60))) + ' min';
   }
 }
-
+ 
+function toggleSheet() {
+  const sheet = document.getElementById('sheet');
+  const open = sheet.classList.toggle('open');
+  const grip = document.getElementById('sheet-grip');
+  grip.setAttribute('aria-expanded', open ? 'true' : 'false');
+  grip.setAttribute('aria-label', open ? 'Hide route details' : 'Show route details');
+}
+ 
 function finishNavigation() {
   document.getElementById('arrival').classList.remove('show');
   dest = null;
   stepIdx = 0;
   startDist = 0;
   arrived = false;
-
-  document.getElementById('bottom-panel').classList.remove('show');
+  routeMode = 'gate';
+  routeSourceKey = null;
+  activeRouteWaypoints = null;
+  activeRouteSteps = null;
+  activeRouteStart = null;
+ 
+  document.getElementById('nav-top').classList.remove('show');
+  document.getElementById('nav-bottom').classList.remove('show');
+  document.getElementById('sheet').classList.remove('open');
   document.getElementById('compass').classList.remove('show');
   document.getElementById('gps-dot').classList.remove('show');
-
-  document.getElementById('topbar-title').textContent = 'CSU-A AR Navigation';
-  document.getElementById('topbar-badge').textContent = 'QR SCAN';
+ 
+  document.getElementById('topbar-title').textContent = 'CSU-A AR';
+  document.getElementById('topbar-badge').textContent = 'Ready';
   document.getElementById('topbar-badge').classList.remove('active');
-
+ 
   history.replaceState({}, '', location.pathname);
   stopCompass();
-  stopMinimap();
-
+ 
   // Show search after finishing navigation
   setTimeout(() => openSearch(), 500);
 }
-
+ 
 function goHome() {
   if (dest) {
     if (confirm('Stop navigation to ' + BUILDINGS[dest].name + '?')) {
@@ -1059,182 +1350,326 @@ function goHome() {
     openSearch();
   }
 }
-
+ 
 /* ================================================================
    AR RENDER LOOP
    ================================================================ */
+// Keep the AR marker centred in the free camera area between the
+// instruction plate (top) and the route sheet (bottom).
+function updateArLayout() {
+  const plate = document.getElementById('plate');
+  const sheet = document.getElementById('sheet');
+  if (!plate || !sheet) return;
+  const top = Math.max(0, plate.getBoundingClientRect().bottom);
+  const bottom = Math.min(arH, sheet.getBoundingClientRect().top);
+  let target = (top + bottom) / 2;
+  target = Math.max(top + 110, target);
+  target = Math.min(target, arH - 110);
+  arCyTarget = target;
+  if (!arCy) arCy = target;
+}
+ 
 function renderLoop(ts = 0) {
   const dt = Math.min((ts - (renderLoop._last || 0)) / 1000, 0.1);
   renderLoop._last = ts;
   arTime = ts;
-
+ 
   arCtx.clearRect(0, 0, arW, arH);
-
+ 
   if (dest && !arrived) {
-    arBob += dt * 2.5;
-    const bob = Math.sin(arBob) * 10;
+    if ((arFrame++ % 5) === 0) updateArLayout();
+    arCy += (arCyTarget - arCy) * Math.min(1, dt * 8);
+ 
+    // The marker stays locked to the centre of the free camera area; GPS +
+    // compass drive its rotation, so it never slides around the screen.
     const cx = arW / 2;
-    const cy = arH / 2 + bob;
-
-    // Smooth arrow rotation
-    currentArrowRot += (arrowRotation - currentArrowRot) * 0.06;
-
-    // Draw ground glow
-    drawGroundGlow(cx, cy + 20, ts);
-
-    // Draw pulsing rings
-    drawPulseRings(cx, cy, ts);
-
-    // Draw distance circle
+    const cy = arCy || arH / 2;
+    const bob = REDUCED_MOTION ? 0 : Math.sin(ts / 450) * 3;
+ 
+    // Smooth compass/GPS changes so the arrow does not twitch when the
+    // phone's heading fluctuates by a few degrees.
+    let angleDelta = normalizeAngle(
+      (arrowRotation - currentArrowRot) * 180 / Math.PI
+    ) * Math.PI / 180;
+    currentArrowRot += angleDelta * Math.min(1, dt * 8);
+ 
+    drawGroundGlow(cx, cy + 10, ts);
+    if (!REDUCED_MOTION) drawPulseRings(cx, cy, ts);
     drawDistanceCircle(cx, cy);
-
-    // Draw directional arrow
-    drawNavigationArrow(cx, cy, currentArrowRot);
-
-    // Draw distance text in AR
-    if (distToDest > 0) {
-      drawARDistanceLabel(cx, cy - 100);
+    drawNavigationArrow(cx, cy + bob, currentArrowRot);
+ 
+    if (gpsPos) {
+      drawARDistanceLabel(cx, cy + 108);
     }
   }
-
+ 
   animFrame = requestAnimationFrame(renderLoop);
 }
-
-function drawNavigationArrow(x, y, angle) {
-  arCtx.save();
-  arCtx.translate(x, y);
-  arCtx.rotate(angle);
-
-  // Drop shadow
-  arCtx.shadowColor = 'rgba(0,0,0,0.45)';
-  arCtx.shadowBlur = 18;
-  arCtx.shadowOffsetY = 4;
-
-  // Thick directional arrow (classic compass/navigation arrow shape)
-  arCtx.beginPath();
-  arCtx.moveTo(0, -52);          // tip
-  arCtx.lineTo(24, -6);          // right wing outer
-  arCtx.lineTo(10, -6);          // right wing inner
-  arCtx.lineTo(10, 44);          // right shaft
-  arCtx.lineTo(-10, 44);         // right shaft bottom
-  arCtx.lineTo(-10, -6);         // left shaft
-  arCtx.lineTo(-24, -6);         // left wing inner
-  arCtx.closePath();             // back to tip
-
-  const grad = arCtx.createLinearGradient(0, -52, 0, 44);
-  grad.addColorStop(0, '#a5c8ff');
-  grad.addColorStop(0.35, '#3b82f6');
-  grad.addColorStop(1, '#1d4ed8');
-  arCtx.fillStyle = grad;
-  arCtx.fill();
-
-  arCtx.shadowBlur = 0;
-  arCtx.shadowOffsetY = 0;
-
-  // White border
-  arCtx.lineJoin = 'round';
-  arCtx.strokeStyle = 'rgba(255,255,255,0.85)';
-  arCtx.lineWidth = 3;
-  arCtx.stroke();
-
-  // Inner highlight
-  arCtx.beginPath();
-  arCtx.moveTo(0, -40);
-  arCtx.lineTo(14, -8);
-  arCtx.lineTo(6, -8);
-  arCtx.lineTo(6, 34);
-  arCtx.lineTo(-6, 34);
-  arCtx.lineTo(-6, -8);
-  arCtx.lineTo(-14, -8);
-  arCtx.closePath();
-  arCtx.fillStyle = 'rgba(255,255,255,0.22)';
-  arCtx.fill();
-
-  arCtx.restore();
+ 
+function projectTargetToScreen() {
+  const centerX = arW / 2;
+  const centerY = arH * 0.58;
+ 
+  if (!gpsPos || !dest) return { x: centerX, y: centerY };
+ 
+  const horizontalDiff = normalizeAngle(bearing - heading);
+  const hFov = 70 * Math.PI / 180;
+  const vFov = 55 * Math.PI / 180;
+ 
+  // Perspective-style angular projection. Clamp to the camera edges so a
+  // target behind/at the extreme side remains visible as an off-screen cue.
+  const xNorm = Math.tan(horizontalDiff * Math.PI / 180) / Math.tan(hFov / 2);
+  const x = Math.max(34, Math.min(arW - 34, centerX + xNorm * (arW / 2)));
+ 
+  const relativeElevation = verticalAngle - (cameraPitch * Math.PI / 180);
+  const yNorm = Math.tan(relativeElevation) / Math.tan(vFov / 2);
+  const y = Math.max(arH * 0.20, Math.min(arH * 0.82, centerY - yNorm * (arH / 2)));
+ 
+  return { x, y };
 }
-
+ 
+// Chunky signage arrow: gold face, navy outline, extruded so it reads as a
+// slab lying in front of the camera on any background.
+const ARROW_PTS = [[0,-58],[31,-10],[12,-10],[12,46],[-12,46],[-12,-10],[-31,-10]];
+ 
+function arrowPath(ctx) {
+  ctx.beginPath();
+  ARROW_PTS.forEach((p, i) => { if (i) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+  ctx.closePath();
+}
+ 
+function drawNavigationArrow(x, y, angle) {
+  const ctx = arCtx;
+  const S = 1.15;
+ 
+  // Extrusion (offset in screen space so the depth always falls downward)
+  ctx.save();
+  ctx.translate(x, y + 11);
+  ctx.rotate(angle);
+  ctx.scale(S, S);
+  arrowPath(ctx);
+  ctx.shadowColor = 'rgba(0,0,0,.5)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = '#0a2b5a';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#001a3a';
+  ctx.stroke();
+  ctx.restore();
+ 
+  // Top face
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(S, S);
+  arrowPath(ctx);
+  const g = ctx.createLinearGradient(0, -58, 0, 46);
+  g.addColorStop(0, '#ffe27a');
+  g.addColorStop(1, '#ffc400');
+  ctx.fillStyle = g;
+  ctx.fill();
+ 
+  // Facet: shade the right half so the arrow reads as a folded chevron
+  ctx.beginPath();
+  ctx.moveTo(0, -58); ctx.lineTo(31, -10); ctx.lineTo(12, -10);
+  ctx.lineTo(12, 46); ctx.lineTo(0, 46);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,34,74,.16)';
+  ctx.fill();
+ 
+  arrowPath(ctx);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#00224a';
+  ctx.stroke();
+  ctx.restore();
+}
+ 
 function drawPulseRings(x, y, t) {
   arCtx.save();
   for (let i = 0; i < 3; i++) {
-    const phase = ((t / 1200) + i * 0.33) % 1;
-    const r = 55 + phase * 50;
-    const a = (1 - phase) * 0.35;
+    const phase = ((t / 1400) + i * 0.33) % 1;
+    const r = 62 + phase * 58;
+    const a = (1 - phase) * 0.55;
     arCtx.beginPath();
     arCtx.arc(x, y, r, 0, Math.PI * 2);
-    arCtx.strokeStyle = 'rgba(59,130,246,' + a + ')';
-    arCtx.lineWidth = 2 - phase;
+    arCtx.strokeStyle = 'rgba(255,207,31,' + a + ')';
+    arCtx.lineWidth = 3 - phase * 2;
     arCtx.stroke();
   }
   arCtx.restore();
 }
-
+ 
 function drawGroundGlow(x, y, t) {
+  // A soft dark pool keeps the gold arrow readable over bright pavement or sky
   arCtx.save();
-  const pulse = 0.5 + Math.sin(t / 600) * 0.15;
-  const grad = arCtx.createRadialGradient(x, y, 0, x, y, 100);
-  grad.addColorStop(0, 'rgba(59,130,246,' + (0.15 * pulse) + ')');
-  grad.addColorStop(1, 'rgba(59,130,246,0)');
+  const grad = arCtx.createRadialGradient(x, y, 0, x, y, 130);
+  grad.addColorStop(0, 'rgba(0,26,58,.42)');
+  grad.addColorStop(1, 'rgba(0,26,58,0)');
   arCtx.fillStyle = grad;
-  arCtx.fillRect(x - 100, y - 100, 200, 200);
+  arCtx.fillRect(x - 130, y - 130, 260, 260);
   arCtx.restore();
 }
-
+ 
 function drawDistanceCircle(x, y) {
   arCtx.save();
   arCtx.beginPath();
-  arCtx.arc(x, y, 85, 0, Math.PI * 2);
-  arCtx.strokeStyle = 'rgba(255,255,255,0.1)';
-  arCtx.lineWidth = 1;
-  arCtx.setLineDash([5, 5]);
+  arCtx.arc(x, y, 106, 0, Math.PI * 2);
+  arCtx.strokeStyle = 'rgba(255,255,255,0.35)';
+  arCtx.lineWidth = 1.5;
+  arCtx.setLineDash([6, 7]);
   arCtx.stroke();
   arCtx.setLineDash([]);
   arCtx.restore();
 }
-
-function drawARDistanceLabel(x, y) {
-  arCtx.save();
-  arCtx.textAlign = 'center';
-  arCtx.textBaseline = 'middle';
-
-  const dist = distToDest > 0 ? (distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km') : '';
-
-  // Background pill
-  const tw = arCtx.measureText(dist).width + 24;
-  arCtx.fillStyle = 'rgba(0,0,0,0.55)';
-  arCtx.beginPath();
-  arCtx.roundRect(x - tw/2, y - 14, tw, 28, 14);
-  arCtx.fill();
-
-  // Text
-  arCtx.fillStyle = '#fff';
-  arCtx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
-  arCtx.fillText(dist, x, y + 1);
-
-  arCtx.restore();
+ 
+function pillPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
-
+ 
+// Distance to the point the arrow is pointing at, with what to do there
+function drawARDistanceLabel(x, y) {
+  const ctx = arCtx;
+  const dist = fmtDist(distToTarget);
+  const t = targetForStep();
+  const caption = (t && t.label) ? t.label : 'Destination';
+ 
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+ 
+  const distFont = '700 22px "Barlow Semi Condensed", system-ui, sans-serif';
+  const capFont = '500 13px "Barlow", system-ui, sans-serif';
+  ctx.font = distFont;
+  const w1 = ctx.measureText(dist).width;
+  ctx.font = capFont;
+  const w2 = ctx.measureText(caption).width;
+  const w = Math.max(w1, w2) + 34;
+  const h = 50;
+ 
+  pillPath(ctx, x - w / 2, y - h / 2, w, h, 16);
+  ctx.fillStyle = 'rgba(0,34,74,.94)';
+  ctx.fill();
+  ctx.strokeStyle = '#ffcf1f';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+ 
+  ctx.fillStyle = '#fff';
+  ctx.font = distFont;
+  ctx.fillText(dist, x, y - 8);
+  ctx.fillStyle = '#ffe58a';
+  ctx.font = capFont;
+  ctx.fillText(caption, x, y + 13);
+ 
+  ctx.restore();
+}
+ 
 /* ================================================================
    SEARCH OVERLAY
    ================================================================ */
-let searchQuery = '';
-
+function fmtDist(m) {
+  return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
+}
+ 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+ 
 function openSearch() {
   document.getElementById('search-overlay').classList.remove('hidden');
+  populateRouteSources();
+  updateRouteStartUI();
   const input = document.getElementById('search-input');
   input.value = '';
-  input.focus();
+  // Only offer "close" once there is a camera view to go back to.
+  document.getElementById('search-close').classList.toggle('is-hidden', !streamReady());
+  // On phones, auto-focusing would raise the keyboard over the list. preventScroll
+  // stops the browser from scrolling the fixed layout to reveal the sliding-in panel.
+  if (!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) input.focus({ preventScroll: true });
   renderSearchResults('');
 }
-
+ 
 function closeSearch() {
   document.getElementById('search-overlay').classList.add('hidden');
 }
+ 
+function populateRouteSources() {
+  const select = document.getElementById('route-source');
+  if (!select) return;
+  const entries = Object.entries(BUILDINGS);
+  select.innerHTML = entries.map(([key, b]) =>
+    '<option value="' + esc(key) + '">' + esc(b.name) + '</option>'
+  ).join('');
+  if (routeSourceKey && BUILDINGS[routeSourceKey]) select.value = routeSourceKey;
+}
 
+function updateRouteStartUI() {
+  const currentBtn = document.getElementById('start-current-btn');
+  const buildingBtn = document.getElementById('start-building-btn');
+  const picker = document.getElementById('route-source-picker');
+  if (currentBtn) currentBtn.classList.toggle('active', routeMode === 'current');
+  if (buildingBtn) buildingBtn.classList.toggle('active', routeMode === 'building');
+  if (picker) picker.style.display = routeMode === 'building' ? 'block' : 'none';
+}
+
+function chooseRouteStart(mode) {
+  routeMode = mode;
+  if (mode === 'current') {
+    routeSourceKey = null;
+    startGPS();
+  } else {
+    populateRouteSources();
+    const select = document.getElementById('route-source');
+    if (!routeSourceKey && select) routeSourceKey = select.value;
+  }
+  updateRouteStartUI();
+}
+
+function setBuildingRouteSource(key) {
+  if (BUILDINGS[key]) routeSourceKey = key;
+  routeMode = 'building';
+  updateRouteStartUI();
+}
+
+function useMyLocation() {
+  dismissGpsGate();
+  startGPS();
+  const bar = document.getElementById('search-locate');
+  const txt = document.getElementById('search-locate-text');
+  if (bar) bar.classList.add('located');
+  if (txt) txt.textContent = gpsPos ? 'GPS active. Results sorted nearest first' : 'Locating you now…';
+  showToast('Allow your location to sort results by distance');
+}
+ 
 function renderSearchResults(query) {
   const container = document.getElementById('search-results');
+ 
+  // Reflect live GPS state on the locate bar.
+  const locateBar = document.getElementById('search-locate');
+  const locateTxt = document.getElementById('search-locate-text');
+  if (locateBar && locateTxt) {
+    if (gpsPos) {
+      locateBar.classList.add('located');
+      const acc = gpsPos.acc ? '±' + Math.round(gpsPos.acc) + ' m' : 'GPS';
+      locateTxt.textContent = 'GPS active (' + acc + '). Nearest first';
+    } else {
+      locateBar.classList.remove('located');
+      locateTxt.textContent = 'Use my location to sort by distance';
+    }
+  }
+ 
   const q = query.toLowerCase().trim();
   const entries = Object.entries(BUILDINGS);
-
+ 
   let filtered;
   if (!q) {
     filtered = entries;
@@ -1242,16 +1677,22 @@ function renderSearchResults(query) {
     filtered = entries.filter(([key, b]) => {
       return b.name.toLowerCase().includes(q) ||
              key.includes(q) ||
+             (BUILDING_CODES[key] || '').toLowerCase().includes(q) ||
              b.loc.toLowerCase().includes(q) ||
              (b.aliases && b.aliases.some(a => a.includes(q)));
     });
   }
-
+ 
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="search-empty"><div class="search-empty-icon">🔍</div>No buildings found for "' + query + '"</div>';
+    container.innerHTML =
+      '<div class="search-empty">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+        '<div>No building matches <b>' + esc(query) + '</b>.</div>' +
+        '<div>Try a name like Library, or a code like CICS.</div>' +
+      '</div>';
     return;
   }
-
+ 
   // Sort by distance if GPS available
   if (gpsPos) {
     filtered.sort((a, b) => {
@@ -1260,321 +1701,65 @@ function renderSearchResults(query) {
       return da - db;
     });
   }
-
-  let html = '';
-  if (q) {
-    html += '<div class="search-section-label">Results (' + filtered.length + ')</div>';
-  } else {
-    html += '<div class="search-section-label">All Buildings (' + filtered.length + ')</div>';
-  }
-
+ 
+  const n = filtered.length;
+  let label;
+  if (q) label = n + (n === 1 ? ' match' : ' matches');
+  else label = n + ' buildings' + (gpsPos ? ', nearest first' : '');
+ 
+  let html = '<div class="search-section-label">' + label + '</div>';
+ 
   filtered.forEach(([key, b]) => {
-    let distText = '';
-    if (gpsPos) {
-      const d = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
-      distText = d < 1000 ? Math.round(d) + 'm' : (d/1000).toFixed(1) + 'km';
-    } else {
-      distText = b.dist;
-    }
-    html += '<div class="search-result" onclick="selectSearchResult(\'' + key + '\')">' +
-      '<div class="search-result-icon">' + b.icon + '</div>' +
-      '<div class="search-result-info">' +
-        '<div class="search-result-name">' + b.name + '</div>' +
-        '<div class="search-result-loc">' + b.loc + '</div>' +
-      '</div>' +
-      '<div class="search-result-dist">' + distText + '</div>' +
-    '</div>';
+    const distText = gpsPos
+      ? fmtDist(haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng))
+      : b.dist.replace(/m$/, ' m');
+    html += '<button class="search-result" type="button" onclick="selectSearchResult(\'' + key + '\')">' +
+      '<span class="code">' + esc(BUILDING_CODES[key] || key.slice(0, 3).toUpperCase()) + '</span>' +
+      '<span class="search-result-info">' +
+        '<span class="search-result-name">' + esc(b.name) + '</span>' +
+        '<span class="search-result-loc">' + esc(b.loc) + '</span>' +
+      '</span>' +
+      '<span class="search-result-dist">' + distText + '</span>' +
+    '</button>';
   });
-
+ 
   container.innerHTML = html;
 }
-
+ 
 async function selectSearchResult(key) {
   closeSearch();
+  // Ask for location BEFORE the camera inside this tap — the browser only
+  // allows one permission prompt per tap, so this is what actually makes the
+  // GPS prompt appear when the user picks a destination.
+  if (!gpsPos && navigator.geolocation) startGPS();
   if (!streamReady() && !await initCamera()) return;
-  setDestination(key);
+
+  // Search navigation is the new dynamic mode. The legacy QR link still
+  // enters through routeMode="gate" and keeps its original route.
+  if (routeMode === 'building' && (!routeSourceKey || routeSourceKey === key)) {
+    showToast('Choose a different starting building');
+    openSearch();
+    return;
+  }
+  if (routeMode === 'current' && !gpsPos) {
+    showToast('Waiting for your GPS position…');
+    startGPS();
+    openSearch();
+    return;
+  }
+
+  setDestination(key, {mode: routeMode, sourceKey: routeSourceKey});
   showToast('Navigating to ' + BUILDINGS[key].name);
 }
-
+ 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('search-input').addEventListener('input', e => {
     renderSearchResults(e.target.value);
   });
   initFeedbackUI();
   flushPendingFeedback();
+  initSpeech();
 });
-/* ================================================================
-   ROUTE DATA — CSU-A Campus
-   ================================================================ */
-
-// Mini map (AR overlay) state
-let minimapCanvas = null;
-let minimapCtx = null;
-let minimapAnimFrame = null;
-let minimapReady = false;
-
-// Hand-traced routes (normalized 0..1 relative to csu_map.png), ported
-// verbatim from lib/data/campus_routes_data.dart so the route guide shows
-// the SAME certified pathway lines as the main kiosk. Each array is a
-// polyline from the kiosk start to the building's end point.
-const ROUTES = {
-  'admin':       [[0.935,0.379],[0.9,0.374],[0.85,0.363],[0.8,0.35],[0.75,0.34],[0.7,0.328],[0.67,0.319],[0.64,0.304],[0.634,0.33],[0.63,0.363],[0.65,0.372],[0.662,0.377],[0.66,0.4],[0.671,0.414]],
-  'cte':         [[0.931,0.382],[0.878,0.367],[0.823,0.353],[0.768,0.338],[0.713,0.324],[0.658,0.309],[0.604,0.294],[0.549,0.28],[0.494,0.265],[0.439,0.248],[0.391,0.237],[0.375,0.231]],
-  'gymplex':     [[0.9325,0.3782],[0.8962,0.3684],[0.86,0.3586],[0.8237,0.3489],[0.7874,0.3391],[0.7512,0.3293],[0.7149,0.3195],[0.7179,0.2889],[0.7208,0.2582],[0.7238,0.2276],[0.7161,0.2142],[0.7083,0.2007]],
-  'gatchalian':  [[0.9304,0.3782],[0.8944,0.3682],[0.8583,0.3582],[0.8223,0.3482],[0.7863,0.3382],[0.7502,0.3282],[0.7142,0.3182],[0.7176,0.2876],[0.7211,0.257],[0.7245,0.2264],[0.7398,0.2302],[0.7551,0.234]],
-  'cics':        [[0.9307,0.3782],[0.8942,0.3694],[0.858,0.3606],[0.8218,0.3518],[0.7856,0.343],[0.7493,0.3342],[0.7507,0.3191],[0.7522,0.304]],
-  'library':     [[0.9302,0.3781],[0.8917,0.3689],[0.8532,0.3598],[0.8147,0.3506],[0.7763,0.3414],[0.7378,0.3323],[0.6993,0.3231],[0.6608,0.3139]],
-  'avr':         [[0.9311,0.377],[0.8914,0.3674],[0.8518,0.3579],[0.8121,0.3483],[0.7725,0.3388],[0.7328,0.3292],[0.7308,0.3406],[0.7287,0.3519]],
-  'canteen':     [[0.9311,0.3764],[0.8858,0.3649],[0.8405,0.3533],[0.7953,0.3418],[0.75,0.3303],[0.7047,0.3187],[0.6594,0.3072],[0.6647,0.275],[0.67,0.2427],[0.6753,0.2105],[0.6657,0.1854],[0.656,0.1603]],
-  'cit':         [[0.9304,0.377],[0.8807,0.3635],[0.8309,0.3501],[0.7812,0.3366],[0.7314,0.3232],[0.6816,0.3097],[0.6319,0.2962],[0.5821,0.2828],[0.5324,0.2693],[0.5333,0.2546],[0.5341,0.2399]],
-  'cbea':        [[0.9304,0.377],[0.8776,0.3629],[0.8249,0.3489],[0.7721,0.3348],[0.7194,0.3207],[0.6666,0.3066],[0.6139,0.2926],[0.5611,0.2785],[0.5083,0.2644],[0.5028,0.2399],[0.4972,0.2154]],
-  'infra':       [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3365,0.1903],[0.3423,0.1652],[0.327,0.1591],[0.3116,0.153]],
-  'dnst':        [[0.9304,0.3758],[0.8704,0.3598],[0.8104,0.3437],[0.7505,0.3277],[0.6905,0.3116],[0.6305,0.2956],[0.5705,0.2796],[0.5105,0.2635],[0.4506,0.2475],[0.3906,0.2314],[0.3306,0.2154],[0.3441,0.1718],[0.3577,0.1281],[0.3712,0.0845],[0.3874,0.0579],[0.4036,0.0312]],
-  'oldadmin':    [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3159,0.2285],[0.3012,0.2415],[0.2865,0.2546]],
-  'hatchery':    [[0.9304,0.377],[0.8704,0.3608],[0.8105,0.3447],[0.7505,0.3285],[0.6905,0.3124],[0.6305,0.2962],[0.5705,0.28],[0.5106,0.2639],[0.4506,0.2477],[0.3906,0.2316],[0.3306,0.2154],[0.3204,0.2567],[0.3103,0.298],[0.3001,0.3393],[0.2899,0.3806],[0.2607,0.3733],[0.2314,0.366],[0.2283,0.3776],[0.2252,0.3892]],
-  'icrm':        [[0.9305,0.377],[0.8717,0.3609],[0.8128,0.3449],[0.754,0.3288],[0.6951,0.3128],[0.6363,0.2967],[0.6277,0.3577],[0.6192,0.4186],[0.6106,0.4796],[0.5671,0.4663],[0.5237,0.453],[0.4802,0.4397],[0.4367,0.4264],[0.4322,0.4438],[0.4277,0.4611],[0.4388,0.4611]],
-  'ceo_cottage': [[0.9305,0.377],[0.8717,0.3609],[0.8128,0.3449],[0.754,0.3288],[0.6951,0.3128],[0.6363,0.2967],[0.6277,0.3577],[0.6192,0.4186],[0.6106,0.4796],[0.5692,0.4673],[0.5278,0.4549],[0.5219,0.4833],[0.516,0.5117],[0.5035,0.5068]],
-  'villa1':      [[0.9302,0.3761],[0.8714,0.3602],[0.8126,0.3443],[0.7538,0.3283],[0.695,0.3124],[0.6363,0.2967],[0.6277,0.3576],[0.6191,0.4185],[0.6106,0.4796],[0.5692,0.4672],[0.5278,0.4549],[0.5175,0.469]],
-  'dorm':        [[0.9312,0.377],[0.8722,0.3609],[0.8132,0.3449],[0.7543,0.3288],[0.6953,0.3128],[0.6363,0.2967],[0.6286,0.351],[0.6212,0.4042],[0.6137,0.4573],[0.6106,0.4796],[0.6154,0.5105]]
-};
-
-// Building marker points (normalized 0..1), same as kiosk markerPoint.
-const MARKERS = {
-  'admin':[0.671,0.414], 'cte':[0.377,0.184], 'gymplex':[0.7181,0.1420],
-  'gatchalian':[0.7695,0.2093], 'cics':[0.7769,0.2962], 'library':[0.6557,0.3415],
-  'avr':[0.7259,0.3660], 'canteen':[0.6501,0.1273], 'cit':[0.5386,0.2105],
-  'cbea':[0.4752,0.1958], 'infra':[0.2982,0.1567], 'dnst':[0.4249,0.0453],
-  'oldadmin':[0.2659,0.2350], 'hatchery':[0.2225,0.4088], 'icrm':[0.4555,0.4722],
-  'ceo_cottage':[0.4937,0.5105], 'villa1':[0.5058,0.4543], 'dorm':[0.6286,0.5179]
-};
-
-// GPS reference anchors for translating blueprint waypoints to real GPS.
-// Least-squares affine fit (axis-aligned, north-up) computed from all campus
-// buildings with verified real GPS coordinates vs their traced markers.
-const GPS_TO_NORM = { m11: 133.610117, b1: -16252.991899, m22: -179.367782, b2: 3292.018977 };
-
-// Normalized blueprint (0..1) -> GPS lat/lng (inverse of the affine fit)
-function normToGps(nx0, ny0) {
-  return { lat: (ny0 - GPS_TO_NORM.b2) / GPS_TO_NORM.m22, lng: (nx0 - GPS_TO_NORM.b1) / GPS_TO_NORM.m11 };
-}
-
-/* ================================================================
-   ROUTE GUIDE (AR overlay) - small square showing route to destination
-   ================================================================ */
-function initMinimap() {
-  if (minimapReady) return;
-  minimapCanvas = document.getElementById('minimap-canvas');
-  minimapCtx = minimapCanvas.getContext('2d');
-  handleMinimapResize();
-  minimapReady = true;
-}
-
-function handleMinimapResize() {
-  if (!minimapCanvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const size = 120;
-  minimapCanvas.width = size * dpr;
-  minimapCanvas.height = size * dpr;
-  minimapCanvas.style.width = size + 'px';
-  minimapCanvas.style.height = size + 'px';
-  if (minimapCtx) minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function startMinimap() {
-  initMinimap();
-  const el = minimapCanvas;
-  if (el) el.style.display = 'block';
-  if (minimapAnimFrame) cancelAnimationFrame(minimapAnimFrame);
-  minimapAnimFrame = requestAnimationFrame(renderMinimap);
-}
-
-function stopMinimap() {
-  if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
-  if (minimapCanvas) minimapCanvas.style.display = 'none';
-}
-
-// Route guide: draws "You" and the real certified campus route to the chosen
-// destination, scaled from real coordinates. It is heading-up, so whatever
-// direction you face points up on the square and shows exactly which way to go.
-function renderMinimap(ts) {
-  if (!minimapCtx || !minimapCanvas) {
-    if (minimapAnimFrame) { cancelAnimationFrame(minimapAnimFrame); minimapAnimFrame = null; }
-    return;
-  }
-
-  const size = 120;
-  const ctx = minimapCtx;
-  ctx.clearRect(0, 0, size, size);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, 14);
-  ctx.clip();
-
-  ctx.fillStyle = 'rgba(15,23,42,0.72)';
-  ctx.fillRect(0, 0, size, size);
-
-  if (!dest || !BUILDINGS[dest]) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 10px -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Route guide', size / 2, size / 2 - 6);
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('search a destination', size / 2, size / 2 + 8);
-    ctx.restore();
-    minimapAnimFrame = requestAnimationFrame(renderMinimap);
-    return;
-  }
-
-  if (!gpsPos) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 10px -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Route guide', size / 2, size / 2 - 6);
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('waiting for GPS...', size / 2, size / 2 + 8);
-    ctx.restore();
-    minimapAnimFrame = requestAnimationFrame(renderMinimap);
-    return;
-  }
-
-  const b = BUILDINGS[dest];
-
-  // Flat-earth metres (east, north) relative to the user's GPS position
-  const meters = (lat, lng) => ({
-    e: (lng - gpsPos.lng) * Math.cos(gpsPos.lat * Math.PI / 180) * 111320,
-    n: (lat - gpsPos.lat) * 110540
-  });
-
-  // Real certified campus route -> GPS -> local metres
-  let routePts = [];
-  if (ROUTES[dest]) {
-    routePts = ROUTES[dest].map(p => {
-      const g = normToGps(p[0], p[1]);
-      return meters(g.lat, g.lng);
-    });
-  }
-  let destPt = null;
-  if (MARKERS[dest]) {
-    const g = normToGps(MARKERS[dest][0], MARKERS[dest][1]);
-    destPt = meters(g.lat, g.lng);
-  }
-
-  // Fit the whole path + destination inside the square, at real scale
-  let farthest = 1;
-  const consider = pt => { const d = Math.hypot(pt.e, pt.n); if (d > farthest) farthest = d; };
-  routePts.forEach(consider);
-  if (destPt) consider(destPt);
-  const scale = Math.min(44 / farthest, 2.5);
-
-  const userX = size / 2;
-  const userY = size - 18;
-
-  // Heading-up: the direction you face always points up on the square
-  const hRad = (heading * Math.PI) / 180;
-  const place = pt => {
-    const fwd = pt.e * Math.sin(hRad) + pt.n * Math.cos(hRad);
-    const right = pt.e * Math.cos(hRad) - pt.n * Math.sin(hRad);
-    return { x: userX + right * scale, y: userY - fwd * scale };
-  };
-
-  // Draw the accurate route path
-  const hasRoute = routePts.length > 0;
-  let routeScr = [];
-  if (hasRoute) {
-    routeScr = routePts.map(place);
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    routeScr.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-    ctx.stroke();
-
-    ctx.strokeStyle = '#22c55e';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    routeScr.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-    ctx.stroke();
-
-    // Dashed connector from the user to the nearest point on the route
-    let best = 0, bestD = 1e9;
-    routeScr.forEach((p, i) => {
-      const d = Math.hypot(p.x - userX, p.y - userY);
-      if (d < bestD) { bestD = d; best = i; }
-    });
-    ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = 'rgba(34,197,94,0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(userX, userY);
-    ctx.lineTo(routeScr[best].x, routeScr[best].y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  let destScr = destPt ? place(destPt) : null;
-  if (!destScr) destScr = hasRoute ? routeScr[routeScr.length - 1] : { x: userX + 26, y: userY - 26 };
-
-  // Keep the pin visible inside the square even if the destination is behind you
-  const pinX = Math.min(108, Math.max(12, destScr.x));
-  const pinY = Math.min(108, Math.max(12, destScr.y));
-
-  // Destination pin
-  ctx.beginPath();
-  ctx.arc(pinX, pinY, 6.5, 0, Math.PI * 2);
-  ctx.fillStyle = '#ef4444';
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  ctx.font = '10px -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(b.icon, pinX, pinY + 3.5);
-
-  const name = b.name.length > 16 ? b.name.substr(0, 16) + '...' : b.name;
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 8px -apple-system, sans-serif';
-  ctx.fillText(name, pinX, pinY + 18);
-
-  // "You" dot
-  ctx.beginPath();
-  ctx.arc(userX, userY, 7, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(59,130,246,0.22)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(userX, userY, 4, 0, Math.PI * 2);
-  ctx.fillStyle = '#3b82f6';
-  ctx.fill();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 8px -apple-system, sans-serif';
-  ctx.fillText('You', userX, userY + 17);
-
-  // Distance badge
-  const distText = distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest / 1000).toFixed(1) + 'km';
-  ctx.font = 'bold 10px -apple-system, sans-serif';
-  const tw = ctx.measureText(distText).width;
-  const midX = (userX + pinX) / 2;
-  const midY = (userY + pinY) / 2;
-  ctx.beginPath();
-  ctx.roundRect(midX - tw / 2 - 6, midY - 9, tw + 12, 18, 9);
-  ctx.fillStyle = 'rgba(9,15,28,0.85)';
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(34,197,94,0.5)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = '#22c55e';
-  ctx.fillText(distText, midX, midY + 3);
-
-  ctx.restore();
-
-  minimapAnimFrame = requestAnimationFrame(renderMinimap);
-}
-
 function streamReady() {
   return stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
 }
@@ -1589,7 +1774,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-
+ 
 function calcBearing(lat1, lon1, lat2, lon2) {
   const toRad = d => d * Math.PI / 180;
   const toDeg = r => r * 180 / Math.PI;
@@ -1598,19 +1783,74 @@ function calcBearing(lat1, lon1, lat2, lon2) {
   const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
-
+ 
 function normalizeAngle(deg) {
   return ((deg % 360) + 540) % 360 - 180;
 }
-
+ 
 function showToast(msg) {
   const t = document.getElementById('toast');
+  // While navigating, drop the toast just below the instruction plate so it
+  // never covers the current step.
+  const plate = document.getElementById('plate');
+  t.style.top = (dest && plate) ? (plate.offsetTop + plate.offsetHeight + 10) + 'px' : '';
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
+  showToast._timer = setTimeout(() => t.classList.remove('show'), 2800);
 }
-
+ 
+/* ================================================================
+   VOICE GUIDE — text-to-speech step announcements
+   ================================================================ */
+function speak(text) {
+  if (!voiceOn || !text) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    if (voicesReady && speechSynthesis.getVoices) {
+      const v = speechSynthesis.getVoices().find(vo => /^en(-|_)/i.test(vo.lang))
+        || speechSynthesis.getVoices()[0];
+      if (v) u.voice = v;
+    }
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+ 
+function toggleVoice() {
+  voiceOn = !voiceOn;
+  if (!voiceOn) { try { speechSynthesis.cancel(); } catch (e) {} }
+  updateVoiceBtn();
+  showToast(voiceOn ? 'Voice guide on' : 'Voice guide off');
+  if (voiceOn) speak('Voice guide on');
+}
+ 
+function updateVoiceBtn() {
+  const btn = document.getElementById('voice-btn');
+  const ic = document.getElementById('voice-icon');
+  if (!btn || !ic) return;
+  btn.classList.toggle('off', !voiceOn);
+  btn.setAttribute('aria-pressed', voiceOn ? 'true' : 'false');
+  ic.innerHTML = voiceOn
+    ? '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/>'
+    : '<path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+}
+ 
+function initSpeech() {
+  if (!('speechSynthesis' in window)) {
+    updateVoiceBtn();
+    return;
+  }
+  const load = () => { voicesReady = (speechSynthesis.getVoices() || []).length > 0; };
+  load();
+  speechSynthesis.addEventListener('voiceschanged', load);
+  updateVoiceBtn();
+}
+ 
 /* ================================================================
    FEEDBACK — AR arrival rating sent to Supabase "feedbacks" table
    Seen by the IMS Super Admin. Falls back to localStorage if
@@ -1619,54 +1859,95 @@ function showToast(msg) {
 const FEEDBACK_URL = 'https://kookpivlvxohyvzxhkex.supabase.co/rest/v1/feedbacks';
 const FEEDBACK_KEY = 'sb_publishable_9SUEcz-VR_p5QYuKto9-qA_iDL4EI3q';
 let selectedRating = 0;
-
+ 
+const FB_MAX = 300;
+const FB_LABELS = ['', 'Poor', 'Okay', 'It was good', 'Great!', 'Excellent!'];
+ 
 function initFeedbackUI() {
-  document.querySelectorAll('.fb-star').forEach(s => {
+  const stars = document.querySelectorAll('.fb-star');
+  stars.forEach(s => {
     s.onclick = () => {
       selectedRating = parseInt(s.dataset.star);
       updateStars();
+      s.classList.remove('pop');
+      void s.offsetWidth; // restart animation
+      s.classList.add('pop');
+      if (navigator.vibrate) navigator.vibrate(20);
     };
+    s.onmouseover = () => hoverStars(parseInt(s.dataset.star));
+    s.onmouseout = () => stars.forEach(x => x.classList.remove('hover'));
+  });
+ 
+  const msg = document.getElementById('fb-msg');
+  if (msg) {
+    msg.addEventListener('input', e => {
+      document.getElementById('fb-count').textContent = e.target.value.length + '/' + FB_MAX;
+    });
+  }
+  updateStars();
+}
+ 
+function hoverStars(n) {
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.classList.toggle('hover', parseInt(s.dataset.star) <= n);
   });
 }
-
+ 
 function updateStars() {
   document.querySelectorAll('.fb-star').forEach(s => {
     s.classList.toggle('on', parseInt(s.dataset.star) <= selectedRating);
   });
+  const label = document.getElementById('fb-label');
+  if (label) {
+    label.textContent = FB_LABELS[selectedRating] || 'How was the guidance?';
+    label.style.animation = 'none';
+    void label.offsetWidth;
+    label.style.animation = '';
+  }
+  const submitBtn = document.getElementById('fb-submit');
+  if (submitBtn) submitBtn.disabled = selectedRating === 0 || submitBtn.classList.contains('success');
 }
-
+ 
 function resetFeedbackUI() {
   selectedRating = 0;
-  updateStars();
-  const msg = document.getElementById('fb-msg');
-  if (msg) msg.value = '';
-  const area = document.getElementById('fb-area');
-  if (area) area.style.display = '';
+  const question = document.getElementById('fb-question');
+  if (question) question.style.display = '';
   const thanks = document.getElementById('fb-thanks');
   if (thanks) thanks.style.display = 'none';
+  const msg = document.getElementById('fb-msg');
+  if (msg) { msg.value = ''; document.getElementById('fb-count').textContent = '0/' + FB_MAX; }
   const submitBtn = document.getElementById('fb-submit');
-  if (submitBtn) submitBtn.disabled = false;
+  if (submitBtn) {
+    submitBtn.classList.remove('loading', 'success');
+    submitBtn.disabled = true;
+  }
+  updateStars();
 }
-
+ 
 function skipFeedback() {
   showFeedbackThanks();
 }
-
+ 
 function showFeedbackThanks() {
-  const area = document.getElementById('fb-area');
+  const question = document.getElementById('fb-question');
   const thanks = document.getElementById('fb-thanks');
-  if (area) area.style.display = 'none';
-  if (thanks) thanks.style.display = '';
+  if (question) question.style.display = 'none';
+  if (thanks) { thanks.style.display = 'flex'; thanks.style.animation = 'none'; void thanks.offsetWidth; thanks.style.animation = ''; }
 }
-
+ 
 async function submitFeedback() {
+  const submitBtn = document.getElementById('fb-submit');
   if (!selectedRating) {
+    const stars = document.getElementById('fb-stars');
+    stars.classList.remove('shake');
+    void stars.offsetWidth;
+    stars.classList.add('shake');
     showToast('Tap a star rating first');
     return;
   }
-  const submitBtn = document.getElementById('fb-submit');
-  if (submitBtn) submitBtn.disabled = true;
-
+  if (submitBtn.classList.contains('loading')) return;
+  submitBtn.classList.add('loading');
+ 
   const body = {
     building_key: dest,
     building_name: (BUILDINGS[dest] && BUILDINGS[dest].name) || dest,
@@ -1677,7 +1958,7 @@ async function submitFeedback() {
     gps_acc: gpsPos ? gpsPos.acc : null,
     device: navigator.userAgent
   };
-
+ 
   try {
     const resp = await fetch(FEEDBACK_URL, {
       method: 'POST',
@@ -1698,9 +1979,12 @@ async function submitFeedback() {
       localStorage.setItem('pendingFeedbacks', JSON.stringify(pending));
     } catch (_) {}
   }
-  showFeedbackThanks();
+  submitBtn.classList.remove('loading');
+  submitBtn.classList.add('success');
+  submitBtn.disabled = true;
+  setTimeout(showFeedbackThanks, 400);
 }
-
+ 
 async function flushPendingFeedback() {
   let pending;
   try {
@@ -1725,7 +2009,7 @@ async function flushPendingFeedback() {
   }
   try { localStorage.setItem('pendingFeedbacks', JSON.stringify(left)); } catch (_) {}
 }
-
+ 
 /* ================================================================
    CLEANUP
    ================================================================ */
@@ -1734,9 +2018,8 @@ window.addEventListener('beforeunload', () => {
   if (animFrame) cancelAnimationFrame(animFrame);
   stopGPS();
   stopCompass();
-  stopMinimap();
-  scanning = false;
 });
 </script>
 </body>
 </html>
+ 
