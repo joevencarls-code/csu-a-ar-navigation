@@ -472,6 +472,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="search" class="search-input" id="search-input" placeholder="Building, office or code (e.g. CICS)" autocomplete="off" aria-label="Search buildings">
       </label>
+      <div id="pending-dest-notice" style="display:none;margin:12px 4px 0;padding:10px 14px;border-radius:12px;background:#fff8e1;border:1px solid #f0d98c;font:500 13px/1.45 var(--font-body);color:#6b5310"></div>
       <div class="route-start">
         <button type="button" class="route-start-btn active" id="start-current-btn" onclick="chooseRouteStart('current')">
           <span>📍</span><span><b>Start from my location</b><small>Use live GPS position</small></span>
@@ -539,7 +540,11 @@ const BUILDINGS = {
       {lat:18.35181949034487, lng:121.65026805406575, label:'First turn left'},
       {lat:18.352278201217583, lng:121.65036764132986, label:'Second turn left'}
     ],
-    aliases:['gatchalian','hall'] },
+    aliases:['gatchalian','hall','gatchalian building','gatchalian hall',
+      // CFAS and CCJE hold classes in Gatchalian Building, so searching
+      // for either college routes here.
+      'cfas','college of fisheries and aquatic sciences','college of fisheries','fisheries',
+      'ccje','college of criminal justice education','college of criminal justice','criminal justice'] },
   cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'120m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
     steps:['Start at the main entrance','Walk straight for 120m and CICS Building is ahead'],
     aliases:['cics','computer','it','information','computing','technology'] },
@@ -814,7 +819,49 @@ function enterFromGate() {
   if (start === 'current') routeMode = 'current';
   else if (start && BUILDINGS[start]) { routeMode = 'building'; routeSourceKey = start; }
   else routeMode = 'gate';
-  if (!dest && d && BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
+  if (!dest && d) {
+    if (BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
+    else if (PENDING_DESTINATIONS[d]) showPendingDestinationNotice(d);
+  }
+}
+
+/* ================================================================
+   DESTINATIONS WAITING ON SURVEYED GPS COORDINATES
+   ---------------------------------------------------------------
+   These buildings are already on the campus map and the kiosk prints a
+   navigation QR for them, but they have no surveyed lat/lng yet, so they
+   cannot be added to BUILDINGS above (a missing coordinate would produce
+   NaN geometry and break the map). Until the coordinates are supplied,
+   a scan of one of these QR codes drops the visitor straight into the
+   destination picker with a short note instead of a dead end.
+
+   To finish a building, copy the template, fill in the real coordinates
+   and delete its PENDING_DESTINATIONS line:
+
+     workshop:    { name:'Workshop Building', icon:'WKS', loc:'Central area - workshops and laboratory bays', dist:'--', time:'--', lat:0.0, lng:0.0,
+       steps:['Start at the main entrance','Follow the highlighted route to the Workshop Building'],
+       waypoints:[],
+       aliases:['workshop','workshop building','work shop'] },
+
+   ...then add the same key to BUILDING_CODES below (e.g. workshop:'WKS').
+   ================================================================ */
+const PENDING_DESTINATIONS = {
+  chm: 'CHM Building',
+  cafeteria: 'Cafeteria',
+  business: 'Business Center',
+  science_labs: 'Science Laboratories',
+  workshop: 'Workshop Building',
+  dormitory: 'Dormitory'
+};
+
+function showPendingDestinationNotice(key) {
+  const name = PENDING_DESTINATIONS[key];
+  openSearch();
+  const notice = document.getElementById('pending-dest-notice');
+  if (notice) {
+    notice.textContent = name + ' is being added to indoor navigation. Its coordinates are still being surveyed - pick your destination from the list for now.';
+    notice.style.display = 'block';
+  }
 }
  
 const GATE_BTN_HTML =
@@ -1586,6 +1633,8 @@ function esc(s) {
  
 function openSearch() {
   document.getElementById('search-overlay').classList.remove('hidden');
+  const pendingNotice = document.getElementById('pending-dest-notice');
+  if (pendingNotice) pendingNotice.style.display = 'none';
   populateRouteSources();
   updateRouteStartUI();
   const input = document.getElementById('search-input');
