@@ -102,16 +102,6 @@
   .heading-calibrate svg{width:18px;height:18px;flex:0 0 auto}
   @media (max-height:700px){.heading-calibrate{bottom:calc(var(--safe-b) + 160px)}}
  
-  /* ── Live campus mini-map ── */
-  .mini-map-wrap{position:absolute;top:calc(var(--safe-t) + 104px);right:12px;z-index:23;width:178px;pointer-events:none;}
-  .mini-map{position:relative;width:178px;height:178px;border-radius:20px;background:rgba(248,251,255,.96);box-shadow:0 12px 30px rgba(0,12,36,.42),0 0 0 1px rgba(255,255,255,.75);overflow:hidden;}
-  #mini-map-canvas{display:block;width:100%;height:100%;}
-  .mini-map-head{position:absolute;left:10px;top:9px;padding:5px 8px;border-radius:999px;background:rgba(0,34,74,.94);color:#fff;font:700 12px/1 var(--font-display);letter-spacing:.3px;box-shadow:0 2px 8px rgba(0,12,36,.2);}
-  .mini-map-status{position:absolute;right:10px;top:9px;padding:5px 7px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--navy);font:600 11px/1 var(--font-display);box-shadow:0 1px 6px rgba(0,12,36,.12);}
-  .mini-map-legend{position:absolute;left:10px;bottom:9px;display:flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.9);color:var(--mist);font:600 10px/1 var(--font-display);box-shadow:0 1px 6px rgba(0,12,36,.12);}
-  .mini-map-legend i{display:block;width:15px;height:4px;border-radius:4px;background:var(--blue-2);}
-  .mini-map-wrap.hidden{display:none;}
-  @media (max-width:380px){.mini-map-wrap{right:9px;width:156px}.mini-map{width:156px;height:156px}}
 
   /* ── Instruction plate (top) ── */
   .nav-top{position:absolute;top:0;left:0;right:0;z-index:22;padding:calc(var(--safe-t) + 58px) 12px 0;transform:translateY(-140%);transition:transform .5s var(--ease);pointer-events:none}
@@ -395,15 +385,7 @@
     </button>
   </div>
  
-  <!-- Live campus mini-map -->
-  <div class="mini-map-wrap hidden" id="mini-map-wrap" aria-label="Live campus map">
-    <div class="mini-map" id="mini-map">
-      <canvas id="mini-map-canvas"></canvas>
-      <span class="mini-map-head">CAMPUS MAP</span>
-      <span class="mini-map-status" id="mini-map-status">GPS</span>
-      <span class="mini-map-legend"><i></i><span>Route</span></span>
-    </div>
-  </div>
+
 
   <!-- Instruction plate (top) -->
   <div class="nav-top" id="nav-top">
@@ -500,6 +482,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="search" class="search-input" id="search-input" placeholder="Building, office or code (e.g. CICS)" autocomplete="off" aria-label="Search buildings">
       </label>
+      <div id="pending-dest-notice" style="display:none;margin:12px 4px 0;padding:10px 14px;border-radius:12px;background:#fff8e1;border:1px solid #f0d98c;font:500 13px/1.45 var(--font-body);color:#6b5310"></div>
       <div class="route-start">
         <button type="button" class="route-start-btn active" id="start-current-btn" onclick="chooseRouteStart('current')">
           <span>📍</span><span><b>Start from my location</b><small>Use live GPS position</small></span>
@@ -567,7 +550,11 @@ const BUILDINGS = {
       {lat:18.35181949034487, lng:121.65026805406575, label:'First turn left'},
       {lat:18.352278201217583, lng:121.65036764132986, label:'Second turn left'}
     ],
-    aliases:['gatchalian','hall'] },
+    aliases:['gatchalian','hall','gatchalian building','gatchalian hall',
+      // CFAS and CCJE hold classes in Gatchalian Building, so searching
+      // for either college routes here.
+      'cfas','college of fisheries and aquatic sciences','college of fisheries','fisheries',
+      'ccje','college of criminal justice education','college of criminal justice','criminal justice'] },
   cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'120m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
     steps:['Start at the main entrance','Walk straight for 120m and CICS Building is ahead'],
     aliases:['cics','computer','it','information','computing','technology'] },
@@ -888,7 +875,49 @@ function enterFromGate() {
   if (start === 'current') routeMode = 'current';
   else if (start && BUILDINGS[start]) { routeMode = 'building'; routeSourceKey = start; }
   else routeMode = 'gate';
-  if (!dest && d && BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
+  if (!dest && d) {
+    if (BUILDINGS[d]) setDestination(d, {mode: routeMode, sourceKey: routeSourceKey});
+    else if (PENDING_DESTINATIONS[d]) showPendingDestinationNotice(d);
+  }
+}
+
+/* ================================================================
+   DESTINATIONS WAITING ON SURVEYED GPS COORDINATES
+   ---------------------------------------------------------------
+   These buildings are already on the campus map and the kiosk prints a
+   navigation QR for them, but they have no surveyed lat/lng yet, so they
+   cannot be added to BUILDINGS above (a missing coordinate would produce
+   NaN geometry and break the map). Until the coordinates are supplied,
+   a scan of one of these QR codes drops the visitor straight into the
+   destination picker with a short note instead of a dead end.
+
+   To finish a building, copy the template, fill in the real coordinates
+   and delete its PENDING_DESTINATIONS line:
+
+     workshop:    { name:'Workshop Building', icon:'🔧', loc:'Central area — workshops and laboratory bays', dist:'--', time:'--', lat:0.0, lng:0.0,
+       steps:['Start at the main entrance','Follow the highlighted route to the Workshop Building'],
+       waypoints:[],
+       aliases:['workshop','workshop building','work shop'] },
+
+   ...then add the same key to BUILDING_CODES below (e.g. workshop:'WKS').
+   ================================================================ */
+const PENDING_DESTINATIONS = {
+  chm: 'CHM Building',
+  cafeteria: 'Cafeteria',
+  business: 'Business Center',
+  science_labs: 'Science Laboratories',
+  workshop: 'Workshop Building',
+  dormitory: 'Dormitory'
+};
+
+function showPendingDestinationNotice(key) {
+  const name = PENDING_DESTINATIONS[key];
+  openSearch();
+  const notice = document.getElementById('pending-dest-notice');
+  if (notice) {
+    notice.textContent = name + ' is being added to indoor navigation. Its coordinates are still being surveyed — pick your destination from the list for now.';
+    notice.style.display = 'block';
+  }
 }
  
 const GATE_BTN_HTML =
@@ -1174,90 +1203,82 @@ function buildCalibratedCampusRoute(key){
     console.info('Route starts outside the calibrated campus graph; using GPS + saved building waypoints.', sourceDistanceToGraph);
   }
 
-  refreshMiniMap();
   return true;
 }
 
-// ================================================================
-// GPS-ONLY DIRECTION
-// ================================================================
-// The AR arrow does not use deviceorientation or the magnetic compass.
-// Direction is derived from the user's actual GPS movement instead.
-// This is more stable for a campus walking route, but the user must walk
-// a few metres with the phone facing roughly in the walking direction.
+// Camera-facing heading from absolute device orientation, with iOS compass support.
+// Heading is geographic north in degrees. Gyroscope bridges only when no absolute
+// orientation is arriving; integrating both at once would double-count turns.
+let lastAbsoluteHeadingTime = 0;
+let compassSamples = 0;
+let compassSource = '';
+
+function screenRotationDegrees() {
+  const orientation = screen.orientation;
+  if (orientation && Number.isFinite(orientation.angle)) return orientation.angle;
+  return Number.isFinite(window.orientation) ? window.orientation : 0;
+}
+
+function acceptCompassHeading(value, source, accuracy) {
+  if (!Number.isFinite(value) || (Number.isFinite(accuracy) && accuracy > 45)) return;
+  const value360 = (value % 360 + 360) % 360;
+  const now = performance.now();
+  const delta = normalizeAngle(value360 - cameraHeading);
+  if (!cameraHeadingValid || !lastAbsoluteHeadingTime || now - lastAbsoluteHeadingTime > 3500) {
+    cameraHeading = value360;
+  } else {
+    // Shortest-angle circular filter: damp sensor noise while following a turn.
+    cameraHeading = (cameraHeading + delta * (Math.abs(delta) > 35 ? .55 : .24) + 360) % 360;
+  }
+  cameraHeadingValid = true;
+  compassSource = source;
+  lastAbsoluteHeadingTime = now;
+  compassSamples++;
+  manualCalibrationDone = true;
+  updateCalibrationButton(false);
+  updateArrowRotation();
+}
 
 async function requestMotionPermission() {
-  // Gyroscope/motion permission is requested from the same user tap.
-  // This is intentionally NOT a compass request.
   try {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const state = await DeviceOrientationEvent.requestPermission();
+      motionPermissionGranted = state === 'granted';
+    } else motionPermissionGranted = true;
     if (typeof DeviceMotionEvent !== 'undefined' &&
         typeof DeviceMotionEvent.requestPermission === 'function') {
       const state = await DeviceMotionEvent.requestPermission();
-      motionPermissionGranted = state === 'granted';
-    } else {
-      motionPermissionGranted = true;
+      motionPermissionGranted = motionPermissionGranted && state === 'granted';
     }
-  } catch (e) {
-    motionPermissionGranted = false;
-  }
-
+  } catch (e) { motionPermissionGranted = false; }
   installMotionSensors();
 }
 
 function installMotionSensors() {
   if (motionInstalled) return;
-  if (typeof window === 'undefined') return;
-
-  const isIOSWebKit = /iPhone|iPad|iPod/i.test(navigator.userAgent || '') &&
-                      /WebKit/i.test(navigator.userAgent || '') &&
-                      !/CriOS|FxiOS/i.test(navigator.userAgent || '');
-
-  const onMotion = e => {
-    if (!cameraHeadingValid) return;
-
-    const rr = e && e.rotationRate;
+  const onOrientation = e => {
+    // Safari's calibrated magnetic heading is clockwise from true north.
+    if (Number.isFinite(e.webkitCompassHeading)) {
+      acceptCompassHeading(e.webkitCompassHeading + screenRotationDegrees(),
+        'iOS compass', e.webkitCompassAccuracy);
+    } else if (e.absolute === true && Number.isFinite(e.alpha)) {
+      // For portrait phones held upright, alpha is anticlockwise from north.
+      acceptCompassHeading(360 - e.alpha + screenRotationDegrees(), 'absolute orientation');
+    }
+  };
+  window.addEventListener('deviceorientationabsolute', onOrientation, true);
+  window.addEventListener('deviceorientation', onOrientation, true);
+  window.addEventListener('devicemotion', e => {
+    if (!cameraHeadingValid || performance.now() - lastAbsoluteHeadingTime < 1500) return;
+    const rate = e.rotationRate && e.rotationRate.alpha;
     const now = performance.now();
-    if (!rr) return;
-
-    /*
-     * IMPORTANT:
-     * In the current DeviceMotion model, rotationRate.gamma is the
-     * screen-normal / twist axis. That is the yaw axis we need.
-     * Some older WebKit implementations expose the equivalent value
-     * differently, so iOS Safari gets a narrowly scoped alpha fallback.
-     */
-    let rate = Number.isFinite(rr.gamma) ? rr.gamma : null;
-    if (rate === null && isIOSWebKit && Number.isFinite(rr.alpha)) {
-      rate = rr.alpha;
-    }
-    if (!Number.isFinite(rate)) return;
-
-    if (!lastMotionTime) {
-      lastMotionTime = now;
-      return;
-    }
-
     const dt = (now - lastMotionTime) / 1000;
     lastMotionTime = now;
-
-    if (dt <= 0 || dt > 0.12) return;
-
-    rate = Math.max(-360, Math.min(360, rate));
-    if (Math.abs(rate) < 0.08) return;
-
-    /*
-     * Positive device twist is opposite our geographic heading sign,
-     * therefore subtract the integrated yaw from the calibrated heading.
-     */
-    const delta = -rate * dt;
-    if (Math.abs(delta) > 12) return;
-
-    cameraHeading = (cameraHeading + delta + 360) % 360;
-    motionYawSamples++;
+    if (!Number.isFinite(rate) || dt <= 0 || dt > .12 || Math.abs(rate) > 360) return;
+    cameraHeading = (cameraHeading - rate * dt + 360) % 360;
     updateArrowRotation();
-  };
-
-  window.addEventListener('devicemotion', onMotion, true);
+  }, true);
   motionInstalled = true;
 }
 
@@ -1265,8 +1286,7 @@ async function allowPermissions() {
   const hint = document.getElementById('gate-hint');
   if (hint) hint.textContent = 'Please allow Camera and Location. AR will open as soon as the camera is ready.';
 
-  // Request motion sensors from the user gesture. No compass UI or magnetic
-  // heading is used by navigation.
+  // Ask for orientation while handling the user's tap (required on iOS).
   await requestMotionPermission();
 
   startGPS();
@@ -1516,7 +1536,7 @@ function onGpsCoords(c) {
       lastCourseTime = now;
 
       // Gentle drift correction only from good, repeated walking fixes.
-      if (manualCalibrationDone && cameraHeadingValid) {
+      if (manualCalibrationDone && cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime > 3000) {
         const since = now - lastGpsCorrectionTime;
         const moving = suppliedSpeed === null || suppliedSpeed >= 0.7;
         if (newAcc <= 18 && moving && since > 2200 && courseSamples >= 4) {
@@ -1559,7 +1579,6 @@ function onGpsCoords(c) {
 
   // Match the filtered fix to the stored campus route when possible.
   routeMatchedPos = matchPositionToRoute(gpsPos);
-  refreshMiniMap();
 
   const readout = document.getElementById('gps-readout');
   if (readout) {
@@ -1604,7 +1623,7 @@ function updateCalibrationButton(show) {
   const btn=document.getElementById('heading-calibrate');
   const text=document.getElementById('heading-calibrate-text');
   if (!btn) return;
-  if (!show || !dest) { btn.classList.remove('show'); return; }
+  if (!show || !dest || (lastAbsoluteHeadingTime && performance.now()-lastAbsoluteHeadingTime < 3000)) { btn.classList.remove('show'); return; }
   btn.classList.add('show');
   btn.classList.toggle('ready',manualCalibrationDone);
   if (text) text.textContent=manualCalibrationDone?'Recalibrate direction':'Set phone forward';
@@ -1630,7 +1649,7 @@ function calibrateCameraHeading() {
 }
 
 function updateDirectionCalibrationNotice() {
-  if (!dest || manualCalibrationDone) return;
+  if (!dest || cameraHeadingValid) return;
   updateCalibrationButton(headingValid);
 }
 
@@ -1670,7 +1689,8 @@ function stopGPS() {
  
 function updateArrowRotation() {
   if (!gpsPos || !dest) return;
-  if (!manualCalibrationDone || !cameraHeadingValid) { arrowRotation=0; return; }
+  if (lastAbsoluteHeadingTime && performance.now()-lastAbsoluteHeadingTime > 12000 && !headingValid) cameraHeadingValid=false;
+  if (!cameraHeadingValid) { arrowRotation=0; return; }
   const diff=normalizeAngle(bearing-cameraHeading);
   arrowRotation=(Math.abs(diff)<2.5?0:diff)*Math.PI/180;
 }
@@ -1864,255 +1884,6 @@ function hasPassedWaypoint(previous, current, waypoint, nextTarget) {
   return angularDifference > 95;
 }
 
-/* ================================================================
-   LIVE CAMPUS MINI-MAP
-   ---------------------------------------------------------------
-   The map is driven by the same local X/Y metre coordinates used by
-   navigation. It follows the user like a small Google-Maps-style
-   campus map: the blue dot is the live GPS position, the route is the
-   calibrated campus path, and the travelled part is dimmed as the user
-   progresses.
-   ================================================================ */
-function setMiniMapVisible(show) {
-  const wrap = document.getElementById('mini-map-wrap');
-  if (!wrap) return;
-  wrap.classList.toggle('hidden', !show);
-}
-
-function miniMapCanvasSize() {
-  const canvas = document.getElementById('mini-map-canvas');
-  if (!canvas) return null;
-  const rect = canvas.getBoundingClientRect();
-  const w = Math.max(120, rect.width || 178);
-  const h = Math.max(120, rect.height || 178);
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-  }
-  return {canvas, w, h, dpr};
-}
-
-function miniMapWorldPoint(nodeOrPoint) {
-  if (!nodeOrPoint) return null;
-  if (nodeOrPoint.local && Number.isFinite(nodeOrPoint.local.x) && Number.isFinite(nodeOrPoint.local.y)) {
-    return {x: nodeOrPoint.local.x, y: nodeOrPoint.local.y};
-  }
-  if (Number.isFinite(nodeOrPoint.lat) && Number.isFinite(nodeOrPoint.lng)) {
-    return geoToLocalMeters(nodeOrPoint);
-  }
-  return null;
-}
-
-function drawMiniMap() {
-  const map = miniMapCanvasSize();
-  if (!map) return;
-  const {canvas, w, h, dpr} = map;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-
-  // Clean map background.
-  ctx.fillStyle = '#f6f9fd';
-  ctx.fillRect(0, 0, w, h);
-
-  // Subtle map grid.
-  ctx.strokeStyle = 'rgba(0,61,130,.055)';
-  ctx.lineWidth = 1;
-  const grid = 26;
-  for (let x = 0; x <= w; x += grid) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-  }
-  for (let y = 0; y <= h; y += grid) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-  }
-
-  const route = getRouteGeometry();
-  const routePoints = Array.isArray(route) ? route.map(miniMapWorldPoint).filter(Boolean) : [];
-  const user = gpsPos ? miniMapWorldPoint(gpsPos) : null;
-  const destination = dest && BUILDINGS[dest] ? miniMapWorldPoint(BUILDINGS[dest]) : null;
-
-  // With no active route, still show the mapped campus pathways and live GPS.
-  const graphPoints = Object.values(CAMPUS_GRAPH).map(n => miniMapWorldPoint(n)).filter(Boolean);
-  const all = routePoints.concat(graphPoints);
-  if (user) all.push(user);
-  if (destination) all.push(destination);
-
-  if (!all.length) {
-    ctx.fillStyle = 'rgba(0,34,74,.72)';
-    ctx.font = '600 12px var(--font-body)';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for GPS…', w/2, h/2 + 4);
-    return;
-  }
-
-  // Keep the user near the centre, while zooming enough to keep the route ahead visible.
-  const center = user || routePoints[0] || all[0];
-  let maxRadius = 35;
-  for (const p of all) {
-    maxRadius = Math.max(maxRadius, Math.hypot(p.x - center.x, p.y - center.y));
-  }
-  const usable = Math.min(w, h) * 0.40;
-  let scale = usable / maxRadius;
-  scale = Math.max(0.34, Math.min(2.7, scale));
-
-  const worldToScreen = (p) => ({
-    x: w/2 + (p.x - center.x) * scale,
-    y: h/2 - (p.y - center.y) * scale
-  });
-
-  // Draw all calibrated campus paths faintly underneath the active route.
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = 'rgba(78,111,148,.20)';
-  ctx.lineWidth = 3;
-  for (const [aId, bId] of CAMPUS_GRAPH_EDGES) {
-    const a = worldToScreen(CAMPUS_GRAPH[aId].local);
-    const b = worldToScreen(CAMPUS_GRAPH[bId].local);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Route line, with the travelled portion dimmed and the remaining route highlighted.
-  if (routePoints.length >= 2) {
-    const match = routeMatchedPos || (gpsPos ? matchPositionToRoute(gpsPos) : null);
-    const progressPoints = [];
-    const remainingPoints = [];
-
-    if (match && Number.isFinite(match.segmentIndex)) {
-      const seg = Math.max(0, Math.min(match.segmentIndex, routePoints.length - 2));
-      for (let i = 0; i <= seg; i++) progressPoints.push(routePoints[i]);
-      if (Number.isFinite(match.x) && Number.isFinite(match.y)) {
-        progressPoints.push({x:match.x,y:match.y});
-        remainingPoints.push({x:match.x,y:match.y});
-      }
-      for (let i = seg + 1; i < routePoints.length; i++) remainingPoints.push(routePoints[i]);
-    } else {
-      remainingPoints.push(...routePoints);
-    }
-
-    const drawPolyline = (points, stroke, width) => {
-      if (points.length < 2) return;
-      ctx.beginPath();
-      const first = worldToScreen(points[0]);
-      ctx.moveTo(first.x, first.y);
-      for (let i = 1; i < points.length; i++) {
-        const p = worldToScreen(points[i]);
-        ctx.lineTo(p.x, p.y);
-      }
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = width;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    };
-
-    drawPolyline(progressPoints, 'rgba(91,109,136,.42)', 7);
-    drawPolyline(remainingPoints, '#1a5faf', 7);
-    drawPolyline(remainingPoints, 'rgba(255,255,255,.86)', 2.2);
-  }
-
-  // Turn/intersection nodes.
-  for (const node of Object.values(CAMPUS_GRAPH)) {
-    const p = worldToScreen(node.local);
-    if (p.x < -5 || p.x > w+5 || p.y < -5 || p.y > h+5) continue;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 2.7, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(255,255,255,.95)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 1.7, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(0,61,130,.62)';
-    ctx.fill();
-  }
-
-  // Destination pin.
-  if (destination) {
-    const p = worldToScreen(destination);
-    ctx.save();
-    ctx.fillStyle = '#e34a4a';
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y + 8);
-    ctx.bezierCurveTo(p.x - 8, p.y - 1, p.x - 7, p.y - 7, p.x, p.y - 7);
-    ctx.bezierCurveTo(p.x + 7, p.y - 7, p.x + 8, p.y - 1, p.x, p.y + 8);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(p.x, p.y - 2.4, 2.2, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
-
-  // Live GPS accuracy halo + blue location dot.
-  if (user) {
-    const p = worldToScreen(user);
-    const accuracyMeters = Number.isFinite(gpsPos?.acc) ? Math.min(45, Math.max(4, gpsPos.acc)) : 12;
-    const radius = Math.max(6, accuracyMeters * scale);
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(26,95,175,.13)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(26,95,175,.25)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.save();
-    if (headingValid && Number.isFinite(heading)) {
-      const a = -heading * Math.PI / 180;
-      ctx.translate(p.x, p.y);
-      ctx.rotate(a);
-      ctx.beginPath();
-      ctx.moveTo(0, -15);
-      ctx.lineTo(-6, 4);
-      ctx.lineTo(0, 1);
-      ctx.lineTo(6, 4);
-      ctx.closePath();
-      ctx.fillStyle = '#1a5faf';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 7.2, 0, Math.PI*2);
-    ctx.fillStyle = '#1a5faf';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
-  }
-
-  // Small north marker.
-  ctx.fillStyle = 'rgba(0,34,74,.72)';
-  ctx.font = '700 10px var(--font-display)';
-  ctx.textAlign = 'center';
-  ctx.fillText('N', w - 15, h - 10);
-
-  const status = document.getElementById('mini-map-status');
-  if (status) {
-    if (!gpsPos) status.textContent = 'GPS…';
-    else if (gpsPos.acc <= 10) status.textContent = 'GPS • good';
-    else if (gpsPos.acc <= 25) status.textContent = 'GPS • OK';
-    else status.textContent = 'GPS • weak';
-  }
-}
-
-function refreshMiniMap() {
-  setMiniMapVisible(!!(gpsPos || dest));
-  requestAnimationFrame(drawMiniMap);
-}
-
-window.addEventListener('resize', () => requestAnimationFrame(drawMiniMap));
 
 function updateDistanceAndBearing() {
   if (!gpsPos || !dest) return;
@@ -2200,7 +1971,6 @@ function updateDistanceAndBearing() {
   }
 
   refreshUI();
-  refreshMiniMap();
 }
 
 function updateDirectionForNewTarget() {
@@ -2255,7 +2025,7 @@ function setDestination(key, options = {}) {
   arrived = false;
   arrowRotation = 0;
   currentArrowRot = 0;
-  const keepExistingHeading = headingValid && cameraHeadingValid;
+  const keepExistingHeading = cameraHeadingValid;
   if (!keepExistingHeading) {
     heading = 0;
     headingValid = false;
@@ -2312,7 +2082,6 @@ function setDestinationUI(key) {
   refreshUI();
  
   document.getElementById('nav-top').classList.add('show');
-  refreshMiniMap();
   document.getElementById('nav-bottom').classList.add('show');
   updateCalibrationButton(headingValid);
 }
@@ -2394,12 +2163,11 @@ function finishNavigation() {
   activeRouteStart = null;
   activeRouteGeometry = null;
   heading=0; headingValid=false; courseSamples=0; courseBuffer=[];
-  manualCalibrationDone=false; cameraHeading=0; cameraHeadingValid=false;
+  manualCalibrationDone=false; cameraHeading=0; cameraHeadingValid=false; lastAbsoluteHeadingTime=0;
   updateCalibrationButton(false);
  
   document.getElementById('nav-top').classList.remove('show');
   document.getElementById('nav-bottom').classList.remove('show');
-  setMiniMapVisible(false);
   document.getElementById('sheet').classList.remove('open');
   document.getElementById('gps-dot').classList.remove('show');
  
@@ -2657,6 +2425,8 @@ function esc(s) {
  
 function openSearch() {
   document.getElementById('search-overlay').classList.remove('hidden');
+  const pendingNotice = document.getElementById('pending-dest-notice');
+  if (pendingNotice) pendingNotice.style.display = 'none';
   populateRouteSources();
   updateRouteStartUI();
   const input = document.getElementById('search-input');
