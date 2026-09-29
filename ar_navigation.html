@@ -271,7 +271,7 @@
     *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
     .boot-line{stroke-dashoffset:0}
   }
-  /* GPS-only navigation: the arrow no longer uses the device compass. */
+  /* Camera guidance requires an absolute device heading. */
   #compass{display:none!important}
 </style>
 </head>
@@ -355,7 +355,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="8.5"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3"></path><circle cx="12" cy="12" r="2.2"></circle>
     </svg>
-    <span id="heading-calibrate-text">Set phone forward</span>
+    <span id="heading-calibrate-text">Enable compass</span>
   </button>
  
   <!-- No camera -->
@@ -1234,7 +1234,6 @@ function acceptCompassHeading(value, source, accuracy) {
   compassSource = source;
   lastAbsoluteHeadingTime = now;
   compassSamples++;
-  manualCalibrationDone = true;
   updateCalibrationButton(false);
   updateArrowRotation();
 }
@@ -1269,16 +1268,6 @@ function installMotionSensors() {
   };
   window.addEventListener('deviceorientationabsolute', onOrientation, true);
   window.addEventListener('deviceorientation', onOrientation, true);
-  window.addEventListener('devicemotion', e => {
-    if (!cameraHeadingValid || performance.now() - lastAbsoluteHeadingTime < 1500) return;
-    const rate = e.rotationRate && e.rotationRate.alpha;
-    const now = performance.now();
-    const dt = (now - lastMotionTime) / 1000;
-    lastMotionTime = now;
-    if (!Number.isFinite(rate) || dt <= 0 || dt > .12 || Math.abs(rate) > 360) return;
-    cameraHeading = (cameraHeading - rate * dt + 360) % 360;
-    updateArrowRotation();
-  }, true);
   motionInstalled = true;
 }
 
@@ -1526,7 +1515,7 @@ function onGpsCoords(c) {
       headingValid = true;
       courseSamples = 1;
       lastCourseTime = now;
-      if (!manualCalibrationDone && dest) updateCalibrationButton(true);
+
     } else {
       const delta = normalizeAngle(movementHeading - heading);
       // Do not allow a single GPS course spike to rotate the navigation 30–90°.
@@ -1535,18 +1524,7 @@ function onGpsCoords(c) {
       courseSamples++;
       lastCourseTime = now;
 
-      // Gentle drift correction only from good, repeated walking fixes.
-      if (manualCalibrationDone && cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime > 3000) {
-        const since = now - lastGpsCorrectionTime;
-        const moving = suppliedSpeed === null || suppliedSpeed >= 0.7;
-        if (newAcc <= 18 && moving && since > 2200 && courseSamples >= 4) {
-          const drift = normalizeAngle(heading - cameraHeading);
-          if (Math.abs(drift) < 22) {
-            cameraHeading = (cameraHeading + drift * 0.05 + 360) % 360;
-          }
-          lastGpsCorrectionTime = now;
-        }
-      }
+
     }
   }
 
@@ -1591,7 +1569,7 @@ function onGpsCoords(c) {
       '<span>ALT ' + altText + '</span>' +
       '<span>GPS ±' + Math.round(newAcc) + 'm · ' + quality + '</span>' +
       '<span>MOVE ' + (headingValid ? Math.round(heading) + '°' : '--') + '</span>' +
-      '<span>VIEW ' + (cameraHeadingValid ? Math.round(cameraHeading) + '°' : '--') + '</span>';
+      '<span>VIEW ' + (cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime < 4000 ? Math.round(cameraHeading) + '°' : 'UNAVAILABLE') + '</span>';
   }
 
   lastGpsTime = now;
@@ -1610,7 +1588,7 @@ function onGpsCoords(c) {
     startDist = Math.hypot(gpsPos.local.x - BUILDINGS[dest].local.x, gpsPos.local.y - BUILDINGS[dest].local.y);
   }
 
-  if (dest) updateDistanceAndBearing();
+  if (dest && !fixWasRejected) updateDistanceAndBearing();
 
   const searchOverlay = document.getElementById('search-overlay');
   if (searchOverlay && !searchOverlay.classList.contains('hidden')) {
@@ -1619,38 +1597,23 @@ function onGpsCoords(c) {
   }
 }
 
-function updateCalibrationButton(show) {
-  const btn=document.getElementById('heading-calibrate');
-  const text=document.getElementById('heading-calibrate-text');
+function updateCalibrationButton() {
+  const btn = document.getElementById('heading-calibrate');
+  const label = document.getElementById('heading-calibrate-text');
   if (!btn) return;
-  if (!show || !dest || (lastAbsoluteHeadingTime && performance.now()-lastAbsoluteHeadingTime < 3000)) { btn.classList.remove('show'); return; }
-  btn.classList.add('show');
-  btn.classList.toggle('ready',manualCalibrationDone);
-  if (text) text.textContent=manualCalibrationDone?'Recalibrate direction':'Set phone forward';
+  const ready = cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime < 4000;
+  btn.classList.toggle('show', !!dest && !ready);
+  if (label) label.textContent = motionPermissionGranted ? 'Compass unavailable' : 'Enable compass';
 }
 
-function calibrateCameraHeading() {
-  if (!dest) return;
-  if (!headingValid || !Number.isFinite(heading)) {
-    showToast('Walk forward 3–5 m first so GPS can establish the travel direction.');
-    return;
-  }
-  cameraHeading=heading;
-  cameraHeadingValid=true;
-  manualCalibrationDone=true;
-  motionYawSamples=0;
-  lastMotionTime=0;
-  fallbackAlpha=null;
-  lastGpsCorrectionTime=Date.now();
-  arrowRotation=0; currentArrowRot=0;
-  updateCalibrationButton(true);
-  updateArrowRotation();
-  showToast('Direction set. Turn the phone normally; GPS will correct drift while walking.');
+async function calibrateCameraHeading() {
+  await requestMotionPermission();
+  updateCalibrationButton();
+  if (!cameraHeadingValid) showToast('This browser has no reliable compass heading. Use route instructions or try a phone with compass access.');
 }
 
 function updateDirectionCalibrationNotice() {
-  if (!dest || cameraHeadingValid) return;
-  updateCalibrationButton(headingValid);
+  updateCalibrationButton();
 }
 
 function onGpsError(err) {
@@ -1689,10 +1652,12 @@ function stopGPS() {
  
 function updateArrowRotation() {
   if (!gpsPos || !dest) return;
-  if (lastAbsoluteHeadingTime && performance.now()-lastAbsoluteHeadingTime > 12000 && !headingValid) cameraHeadingValid=false;
-  if (!cameraHeadingValid) { arrowRotation=0; return; }
-  const diff=normalizeAngle(bearing-cameraHeading);
-  arrowRotation=(Math.abs(diff)<2.5?0:diff)*Math.PI/180;
+  const freshHeading = cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime < 4000;
+  const goodPosition = gpsPos.acc <= 20 && Date.now() - gpsPos.time < 10000;
+  updateCalibrationButton();
+  if (!freshHeading || !goodPosition) { arrowRotation = 0; return; }
+  const diff = normalizeAngle(bearing - cameraHeading);
+  arrowRotation = (Math.abs(diff) < 2.5 ? 0 : diff) * Math.PI / 180;
 }
 
 function distancePointToSegmentMeters(p, a, b) {
@@ -1819,7 +1784,7 @@ function matchPositionToRoute(pos) {
     }
   }
 
-  return best;
+  return best && best.distance <= Math.max(12, Math.min(22, (pos.acc || 10) * 1.2)) ? best : null;
 }
 
 function routeLookAheadTarget() {
@@ -1928,11 +1893,11 @@ function updateDistanceAndBearing() {
     const next = stepIdx + 1 < waypoints.length ? waypoints[stepIdx + 1] : building;
 
     const waypointRadius = Math.max(7, Math.min(16, accuracy * 0.55 + 3));
-    const nearWaypoint = distToTarget <= waypointRadius;
+    const nearWaypoint = accuracy <= 15 && distToTarget <= waypointRadius;
 
     const corridorDistance = distancePointToSegmentMeters(gpsPos, wp, next);
     const nearCorridor = corridorDistance <= Math.max(accuracy * 0.8, 7);
-    const passed = previous ? hasPassedWaypoint(previous, gpsPos, wp, next) : false;
+    const passed = accuracy <= 12 && previous && previous.acc <= 12 ? hasPassedWaypoint(previous, gpsPos, wp, next) : false;
 
     if (nearWaypoint || (passed && nearCorridor)) {
       stepIdx++;
@@ -1947,7 +1912,7 @@ function updateDistanceAndBearing() {
   if (stepIdx >= waypoints.length) {
     const arrivalRadius = Math.max(10, Math.min(20, accuracy * 0.65 + 5));
 
-    if (distToDest <= arrivalRadius) {
+    if (accuracy <= 12 && localDistance(gpsPos, building) <= arrivalRadius && distToDest <= arrivalRadius) {
       if (!arrived) {
         arrived = true;
         const arrival = document.getElementById('arrival');
@@ -2235,7 +2200,10 @@ function renderLoop(ts = 0) {
     drawGroundGlow(cx, cy + 10, ts);
     if (!REDUCED_MOTION) drawPulseRings(cx, cy, ts);
     drawDistanceCircle(cx, cy);
-    drawNavigationArrow(cx, cy + bob, currentArrowRot);
+    if (cameraHeadingValid && performance.now() - lastAbsoluteHeadingTime < 4000 &&
+        gpsPos && gpsPos.acc <= 20 && Date.now() - gpsPos.time < 10000) {
+      drawNavigationArrow(cx, cy + bob, currentArrowRot);
+    }
  
     if (gpsPos) {
       drawARDistanceLabel(cx, cy + 108);
@@ -2249,9 +2217,9 @@ function projectTargetToScreen() {
   const centerX = arW / 2;
   const centerY = arH * 0.58;
  
-  if (!gpsPos || !dest) return { x: centerX, y: centerY };
+  if (!gpsPos || !dest || !cameraHeadingValid) return { x: centerX, y: centerY };
  
-  const horizontalDiff = normalizeAngle(bearing - (cameraHeadingValid ? cameraHeading : heading));
+  const horizontalDiff = normalizeAngle(bearing - cameraHeading);
   const hFov = 70 * Math.PI / 180;
   const vFov = 55 * Math.PI / 180;
  
