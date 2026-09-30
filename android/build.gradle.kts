@@ -1,0 +1,1921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#002855">
+<title>CSU-A AR Navigation</title>
+<style>
+  :root{--blue:#003d82;--blue-light:#1a5faf;--blue-dark:#002855;--green:#059669;--gold:#ffd700;--gold-light:#ffe44d;--red:#dc2626;--radius:14px}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;position:fixed;top:0;left:0;width:100%;background:#000}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  button{font-family:inherit}
+
+  #app{width:100%;height:100%;position:relative;overflow:hidden}
+
+  /* ── Camera (full screen, AR) ── */
+  .ar-half{position:absolute;top:0;left:0;width:100%;height:100%;overflow:hidden}
+  #camera-feed{width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:1;background:#111}
+  #ar-canvas{position:absolute;top:0;left:0;z-index:3;pointer-events:none;width:100%;height:100%}
+
+  /* ── Loading ── */
+  .overlay{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s,visibility .4s}
+  .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .overlay-dark{background:linear-gradient(180deg,var(--blue),var(--blue-dark));color:#fff}
+  .overlay-scan{background:rgba(0,23,51,.82);z-index:30}
+  .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.15);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── Top Bar ── */
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:20;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:linear-gradient(180deg,rgba(0,40,85,.82) 0%,rgba(0,40,85,0) 100%);display:flex;align-items:center;gap:10px;pointer-events:none}
+  .topbar>*{pointer-events:auto}
+  .topbar-title{flex:1;color:#fff;font-size:15px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-badge{background:var(--blue);color:#fff;font-size:10px;padding:3px 9px;border-radius:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;transition:background .3s}
+  .topbar-badge.active{background:var(--gold);color:var(--blue-dark)}
+  .topbar-btn{width:36px;height:36px;border-radius:50%;border:none;background:rgba(255,255,255,.15);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);flex-shrink:0;cursor:pointer}
+
+  /* ── Compass (over the camera, shows north / bearing) ── */
+  .compass{position:absolute;top:calc(env(safe-area-inset-top,0px) + 74px);right:14px;z-index:21;width:52px;height:52px;border-radius:50%;background:rgba(0,40,85,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;border:2px solid rgba(255,215,0,.35);box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  .compass.show{display:flex}
+  .compass-needle{width:28px;height:28px;transition:transform .15s linear}
+
+  /* ── GPS indicator ── */
+  .gps-dot{position:absolute;top:60px;left:14px;z-index:20;width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.4);display:none}
+  .gps-dot.show{display:block}
+  .gps-dot.on{background:var(--gold);box-shadow:0 0 8px var(--gold)}
+
+  /* ── Scanner ── */
+  .scan-frame{width:250px;height:250px;border:2.5px solid rgba(255,255,255,.85);border-radius:18px;position:relative;margin-bottom:20px}
+  .scan-frame::before{content:'';position:absolute;inset:-3px;border-radius:20px;border:3px solid transparent;border-top-color:var(--gold);animation:rotateBorder 1.4s linear infinite}
+  @keyframes rotateBorder{to{transform:rotate(360deg)}}
+  .scan-line{position:absolute;left:12px;right:12px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanY 2.2s ease-in-out infinite}
+  @keyframes scanY{0%,100%{top:8px}50%{top:calc(100% - 8px)}}
+  .scan-corners{position:absolute;inset:-1px}
+  .scan-corners::before,.scan-corners::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
+  .scan-corners::before{top:-1px;left:-1px;border-width:3px 0 0 3px;border-radius:14px 0 0 0}
+  .scan-corners::after{top:-1px;right:-1px;border-width:3px 3px 0 0;border-radius:0 14px 0 0}
+  .scan-corners-bottom::before,.scan-corners-bottom::after{content:'';position:absolute;width:24px;height:24px;border-color:#fff;border-style:solid}
+  .scan-corners-bottom{position:absolute;bottom:-1px;left:-1px;right:-1px}
+  .scan-corners-bottom::before{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 14px}
+  .scan-corners-bottom::after{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 14px 0}
+  .scan-hint{color:#fff;font-size:14px;text-align:center;line-height:1.6;text-shadow:0 1px 4px rgba(0,0,0,.6);padding:0 16px}
+  .scan-hint strong{display:block;font-size:16px;margin-bottom:4px}
+  .scan-cancel{margin-top:16px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:10px 24px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .scan-fallback{margin-top:12px}
+  .scan-fallback input{background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.25);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;width:220px;text-align:center;outline:none}
+  .scan-fallback input::placeholder{color:rgba(255,255,255,.4)}
+  .scan-fallback button{margin-top:8px;background:linear-gradient(135deg,var(--blue),var(--blue-dark));border:none;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;width:220px;cursor:pointer}
+
+  /* ── Top Nav (steps at top) ── */
+  .nav-top{position:absolute;top:0;left:0;right:0;z-index:22;padding-top:max(52px,calc(env(safe-area-inset-top) + 52px));transform:translateY(-130%);transition:transform .5s cubic-bezier(.16,1,.3,1)}
+  .nav-top.show{transform:translateY(0)}
+  .nav-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(0,61,130,.92),rgba(0,40,85,.94));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,215,0,.28);border-radius:18px;margin:0 12px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,30,70,.45)}
+  .nav-banner-main{flex:1;min-width:0}
+  .panel-name{font-size:15px;font-weight:800;color:#fff;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .panel-sub{font-size:11px;color:rgba(255,255,255,.72);margin:2px 0 4px;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .panel-sub .icon{font-size:13px}
+  .btn-scan-mini{width:38px;height:38px;border-radius:12px;border:none;border:1.5px solid rgba(255,215,0,.35);background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;box-shadow:0 4px 12px rgba(0,61,130,.4)}
+  .btn-scan-mini.ghost{background:rgba(255,255,255,.14);border:none}
+  .btn-scan-mini.off{background:rgba(255,255,255,.1);opacity:.55}
+
+  /* Direction card */
+  .dir-card{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:var(--radius);padding:12px;margin-bottom:12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .dir-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,.2)}
+  .dir-icon svg{width:30px;height:30px}
+  .dir-label{font-size:10px;color:rgba(255,255,255,.6);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .dir-text{font-size:14px;font-weight:800;color:#fff;line-height:1.3}
+  .target-meta{font:600 9px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(255,255,255,.58);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* Stats row */
+  .stats-row{display:flex;gap:8px;margin:10px 12px 0}
+  .stat{flex:1;background:rgba(0,40,85,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,215,0,.22);border-radius:12px;padding:7px 6px;text-align:center}
+  .stat-val{font-size:14px;font-weight:800;color:var(--gold)}
+  .stat-lbl{font-size:8px;color:rgba(255,255,255,.62);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:1px}
+  .stat.big .stat-val{font-size:18px;color:#fff}
+  .stat.big .stat-lbl{color:var(--gold)}
+  .gps-readout{margin:6px 12px 0;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;color:rgba(255,255,255,.72);font:600 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.15px;text-shadow:0 1px 3px rgba(0,0,0,.35)}
+  .gps-readout span{padding:4px 7px;border-radius:8px;background:rgba(0,40,85,.52);border:1px solid rgba(255,255,255,.10)}
+
+  /* Buttons */
+  .btn-row{display:flex;gap:8px}
+  .btn{flex:1;padding:12px;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .15s}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;box-shadow:0 4px 14px rgba(0,61,130,.3)}
+  .btn-success{background:linear-gradient(135deg,var(--green),#047857);color:#fff;box-shadow:0 4px 14px rgba(5,150,105,.3)}
+  .btn-outline{background:rgba(255,255,255,.12);color:#fff;border:1.5px solid rgba(255,255,255,.25)}
+
+  /* ── No Camera ── */
+  .no-cam{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(140deg,#003d82,#002855);color:#fff;padding:32px;text-align:center}
+  .no-cam-icon{font-size:56px;margin-bottom:16px}
+  .no-cam h2{font-size:20px;margin-bottom:6px}
+  .no-cam p{font-size:13px;color:rgba(255,255,255,.7);line-height:1.5;margin-bottom:20px;max-width:300px}
+  .no-cam button{background:linear-gradient(135deg,var(--blue),var(--blue-dark));border:1.5px solid rgba(255,215,0,.35);color:#fff;padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer}
+
+  /* ── Arrival ── */
+  .arrival{position:absolute;inset:0;z-index:40;background:linear-gradient(180deg,rgba(0,40,85,.88),rgba(0,26,58,.9));display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:all .4s;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .arrival.show{opacity:1;visibility:visible}
+  .arrival-circle{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,var(--gold-light),var(--gold));display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 0 30px rgba(255,215,0,.35);animation:popIn .5s cubic-bezier(.16,1,.3,1)}
+  @keyframes popIn{0%{transform:scale(0) rotate(-20deg)}100%{transform:scale(1) rotate(0)}}
+  .arrival h2{color:#fff;font-size:22px;font-weight:800;margin-bottom:4px;animation:fbFadeUp .4s ease}
+  .arrival p{color:rgba(255,255,255,.75);font-size:14px;margin-bottom:24px;text-align:center;padding:0 20px}
+  .arrival > button{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--blue-dark);border:none;padding:12px 36px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)}
+
+  /* ── Feedback (interactive) ── */
+  .fb-area{margin-top:8px;text-align:center}
+  .fb-stars{display:flex;gap:8px;justify-content:center;padding:4px;margin-bottom:6px}
+  .fb-star{font-size:34px;line-height:1;color:rgba(255,255,255,.22);cursor:pointer;transition:color .12s,transform .12s,text-shadow .2s;text-shadow:0 0 0 transparent}
+  .fb-star:hover{color:#fde047;transform:scale(1.25) rotate(-8deg)}
+  .fb-star.hover{color:#fde047}
+  .fb-star.on{color:#facc15;transform:scale(1.12);text-shadow:0 3px 14px rgba(250,204,21,.55)}
+  .fb-star.pop{animation:starPop .38s cubic-bezier(.16,1,.3,1)}
+  @keyframes starPop{0%{transform:scale(.4)}55%{transform:scale(1.55)}100%{transform:scale(1.12)}}
+  .fb-stars.shake{animation:starShake .4s ease}
+  @keyframes starShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}50%{transform:translateX(8px)}75%{transform:translateX(-5px)}}
+  .fb-label{color:#cbd5e1;font-size:12px;font-weight:600;margin-bottom:10px;min-height:15px;transition:color .2s,transform .2s;animation:fbFadeUp .3s ease}
+  @keyframes fbFadeUp{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+  .fb-msg-wrap{position:relative;width:86%;max-width:280px;margin:0 auto 12px}
+  .fb-msg{width:100%;padding:10px 12px 22px;border:1.5px solid rgba(255,255,255,.2);border-radius:12px;background:rgba(255,255,255,.08);color:#fff;font-size:13px;resize:none;font-family:inherit;outline:none;transition:border-color .2s,background .2s;display:block}
+  .fb-msg::placeholder{color:rgba(255,255,255,.4)}
+  .fb-msg:focus{border-color:var(--gold);background:rgba(255,255,255,.14)}
+  .fb-count{position:absolute;right:10px;bottom:6px;font-size:10px;color:rgba(255,255,255,.35);font-weight:600}
+  .fb-actions{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:6px}
+  .fb-submit{background:linear-gradient(135deg,var(--blue),var(--blue-dark));color:#fff;padding:11px 20px;border-radius:12px;border:none;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 14px rgba(0,61,130,.35);transition:transform .12s,opacity .2s,background .3s,box-shadow .2s}
+  .fb-submit:active{transform:scale(.96)}
+  .fb-submit:disabled{opacity:.5;cursor:default;box-shadow:none}
+  .fb-submit .fb-check{display:none}
+  .fb-submit.success{background:linear-gradient(135deg,var(--gold),#eab308);box-shadow:0 4px 14px rgba(255,215,0,.4)}
+  .fb-submit.success .fb-check{display:block}
+  .fb-submit.success .fb-submit-txt{display:none}
+  .fb-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none}
+  .fb-submit.loading .fb-spinner{display:block}
+  .fb-submit.loading .fb-submit-txt{display:none}
+  .fb-skip{background:transparent;border:none;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer;text-decoration:underline;padding:10px 8px;transition:color .2s}
+  .fb-skip:hover{color:rgba(255,255,255,.8)}
+  .fb-thanks{display:flex;flex-direction:column;align-items:center;color:var(--gold);font-size:15px;font-weight:700;margin-top:8px;animation:fbThanksIn .5s cubic-bezier(.16,1,.3,1)}
+  .fb-thanks-inner{display:flex;align-items:center;gap:8px}
+  .fb-thanks-sub{color:rgba(255,255,255,.5);font-size:11px;font-weight:500;margin-top:6px}
+  @keyframes fbThanksIn{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}
+
+  /* ── Toast ── */
+  .toast{position:absolute;top:max(60px,calc(env(safe-area-inset-top) + 50px));left:50%;transform:translateX(-50%) translateY(-20px);z-index:35;background:rgba(0,40,85,.9);border:1px solid rgba(255,215,0,.4);color:#fff;padding:10px 20px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);white-space:nowrap}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ── Search Overlay ── */
+  .search-overlay{position:absolute;inset:0;z-index:45;background:linear-gradient(180deg,#003d82,#002855);display:flex;flex-direction:column;transition:transform .4s cubic-bezier(.16,1,.3,1),opacity .3s}
+  .search-overlay.hidden{transform:translateY(100%);opacity:0;pointer-events:none}
+  .search-header{padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top));display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.12)}
+  .search-header h2{color:#fff;font-size:17px;font-weight:800;flex:1}
+  .search-close{width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .search-input-wrap{padding:12px 16px;position:relative}
+  .search-input-wrap svg{position:absolute;left:28px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.55);pointer-events:none}
+  .search-input{width:100%;padding:13px 14px 13px 44px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.16);border-radius:14px;color:#fff;font-size:15px;outline:none;transition:border-color .2s}
+  .search-input:focus{border-color:var(--gold);background:rgba(255,255,255,.16)}
+  .search-input::placeholder{color:rgba(255,255,255,.5)}
+  .search-locate{margin:0 16px 4px;padding:10px 14px;border-radius:12px;border:1.5px dashed rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background .15s}
+  .search-locate:hover{background:rgba(255,255,255,.12)}
+  .search-locate svg{color:var(--gold);flex-shrink:0}
+  .search-locate.located{border-style:solid;border-color:rgba(34,197,94,.5);color:#86efac}
+  .search-locate.located svg{color:#22c55e}
+  .search-results{flex:1;overflow-y:auto;padding:4px 16px 100px;-webkit-overflow-scrolling:touch}
+  .search-result{display:flex;align-items:center;gap:12px;padding:14px 12px;border-radius:14px;cursor:pointer;transition:background .15s}
+  .search-result:active{background:rgba(255,255,255,.12)}
+  .search-result-icon{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+  .search-result-info{flex:1;min-width:0}
+  .search-result-name{color:#fff;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .search-result-loc{color:rgba(255,255,255,.58);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .search-result-dist{color:var(--gold);font-size:12px;font-weight:700;flex-shrink:0}
+  .search-section-label{color:rgba(255,255,255,.5);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;padding:16px 12px 8px}
+  .search-empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.5);font-size:14px}
+  .search-empty-icon{font-size:40px;margin-bottom:12px}
+
+
+
+  /* ── Minimal visual system ── */
+  :root{
+    --blue:#0b1220;--blue-light:#172033;--blue-dark:#070b13;
+    --green:#22c55e;--gold:#f5c451;--gold-light:#f7d77d;--red:#ef4444;
+    --radius:10px;
+  }
+  .topbar{
+    padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top));
+    background:linear-gradient(180deg,rgba(7,11,19,.78),rgba(7,11,19,0));
+  }
+  .topbar-title{font-size:14px;font-weight:600;text-shadow:none;letter-spacing:-.1px}
+  .topbar-badge{background:rgba(255,255,255,.12);color:rgba(255,255,255,.82);padding:4px 8px;border-radius:6px;font-size:9px;letter-spacing:.5px}
+  .topbar-badge.active{background:var(--gold);color:#17120a}
+  .topbar-btn{
+    width:34px;height:34px;border-radius:9px;background:rgba(10,15,24,.58);
+    border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:none
+  }
+  .compass{
+    width:44px;height:44px;right:16px;border-radius:10px;background:rgba(8,12,20,.62);
+    border:1px solid rgba(255,255,255,.14);box-shadow:none;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+  }
+  .gps-dot{top:62px;left:16px}
+  .nav-top{padding-top:max(58px,calc(env(safe-area-inset-top) + 58px))}
+  .nav-banner{
+    margin:0 12px;padding:9px 10px;gap:10px;border-radius:11px;
+    background:rgba(8,12,20,.78);border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 5px 20px rgba(0,0,0,.2);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)
+  }
+  .panel-name{font-size:14px;font-weight:650}
+  .panel-sub{font-size:10px;color:rgba(255,255,255,.56);margin:2px 0 3px}
+  .btn-scan-mini{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none}
+  .dir-card{
+    gap:10px;background:transparent;border:0;border-radius:0;padding:8px 2px;margin-bottom:7px;backdrop-filter:none
+  }
+  .dir-icon{width:44px;height:44px;border-radius:9px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1)}
+  .dir-icon svg{width:25px;height:25px}
+  .dir-label{font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.6px}
+  .dir-text{font-size:13px;font-weight:650}
+  .target-meta{font-size:8px;color:rgba(255,255,255,.42);margin-top:3px}
+  .stats-row{gap:1px;margin:7px 12px 0;background:rgba(0,0,0,.18);border-radius:8px;overflow:hidden}
+  .stat{background:rgba(8,12,20,.62);border:0;border-radius:0;padding:7px 5px;backdrop-filter:none}
+  .stat-val{font-size:13px;color:#fff}
+  .stat.big .stat-val{font-size:16px}
+  .stat-lbl{font-size:7px;color:rgba(255,255,255,.45);letter-spacing:.5px}
+  .stat.big .stat-lbl{color:rgba(255,255,255,.45)}
+  .gps-readout{margin:5px 12px 0;color:rgba(255,255,255,.5);font-size:8px;text-shadow:none}
+  .gps-readout span{padding:3px 5px;border-radius:4px;background:rgba(8,12,20,.5);border:0}
+  .toast{background:rgba(8,12,20,.9);border:1px solid rgba(255,255,255,.12);border-radius:8px;box-shadow:none;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .no-cam{background:#080c14}
+  .no-cam h2{font-weight:650}
+  .no-cam button{background:#fff;color:#10141c;border:0;border-radius:9px;box-shadow:none}
+  .arrival{background:rgba(7,11,19,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .arrival-circle{width:72px;height:72px;background:rgba(245,196,81,.14);box-shadow:none}
+  .arrival h2{font-size:20px;font-weight:650}
+  .arrival > button{background:#fff;color:#10141c;border:0;border-radius:9px;box-shadow:none}
+  .search-overlay{background:#080c14}
+  .search-header{border-bottom:1px solid rgba(255,255,255,.08)}
+  .search-header h2{font-size:16px;font-weight:650}
+  .search-close{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.08)}
+  .search-input-wrap{padding:12px 16px 8px}
+  .search-input{padding:12px 13px 12px 42px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px}
+  .search-input:focus{border-color:rgba(245,196,81,.7);background:rgba(255,255,255,.07)}
+  .search-locate{margin:0 16px 4px;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04)}
+  .search-result{padding:11px 8px;border-radius:9px}
+  .search-result-icon{width:38px;height:38px;border-radius:8px;background:rgba(255,255,255,.06);border:0;font-size:18px}
+  .search-result-name{font-size:13px;font-weight:600}
+  .search-result-loc{font-size:11px;color:rgba(255,255,255,.48)}
+  .search-result-dist{font-size:11px;color:var(--gold)}
+  .search-section-label{font-size:9px;letter-spacing:.7px;padding:14px 8px 7px;color:rgba(255,255,255,.4)}
+  .btn{border-radius:9px;box-shadow:none}
+  .btn-primary,.btn-success{background:#fff;color:#10141c;box-shadow:none}
+  .btn-outline{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);box-shadow:none}
+  .scan-cancel{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:8px;backdrop-filter:none}
+
+</style>
+
+</head>
+<body>
+<div id="app">
+  <!-- Loading -->
+  <div class="overlay overlay-dark" id="loading">
+    <div class="spinner"></div>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;margin-top:14px">Starting camera...</p>
+  </div>
+
+  <!-- Permission gate: explicit Block / Allow before AR starts -->
+  <div class="overlay overlay-dark" id="start-gate" style="display:none">
+    <div style="font-size:52px;margin-bottom:14px">🔐</div>
+    <h2 style="color:#fff;font-size:20px;margin-bottom:6px">Allow AR Navigation?</h2>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.55;text-align:center;max-width:290px;margin-bottom:18px">AR wayfinding uses your camera to overlay the arrow on the live view and your location to guide you to the building.</p>
+    <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:6px 14px;margin-bottom:16px;width:100%;max-width:280px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0">
+        <span style="color:#fff;font-size:13px">📷 Camera</span>
+        <span id="perm-camera" style="font-weight:700;font-size:13px;color:#94a3b8">—</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid rgba(255,255,255,.08)">
+        <span style="color:#fff;font-size:13px">📍 Location / GPS</span>
+        <span id="perm-location" style="font-weight:700;font-size:13px;color:#94a3b8">—</span>
+      </div>
+    </div>
+    <div id="gate-btns" style="display:flex;gap:10px;width:100%;max-width:280px">
+      <button id="gate-block-btn" onclick="blockPermissions()" style="flex:1;background:rgba(255,255,255,.14);color:#fff;border:none;padding:14px 0;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Block</button>
+      <button id="gate-allow-btn" onclick="allowPermissions()" style="flex:1;background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 0;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Allow</button>
+    </div>
+    <p id="gate-hint" style="color:#fbbf24;font-size:12px;line-height:1.5;text-align:center;max-width:300px;margin-top:14px"></p>
+  </div>
+
+  <!-- Location permission gate (search entry — asks explicitly and auto-opens GPS) -->
+  <div class="overlay overlay-dark" id="gps-gate" style="display:none">
+    <div style="font-size:48px;margin-bottom:14px">📍</div>
+    <h2 style="color:#fff;font-size:19px;margin-bottom:8px">Allow Location?</h2>
+    <p style="color:rgba(255,255,255,.8);font-size:13px;line-height:1.55;text-align:center;max-width:290px;margin-bottom:20px">Your location is used to sort buildings by distance and to guide you directly to your destination.</p>
+    <button onclick="allowGps()" style="background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:13px 34px;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Allow Location</button>
+    <button onclick="dismissGpsGate()" style="background:transparent;border:none;color:rgba(255,255,255,.55);font-size:12px;cursor:pointer;margin-top:14px;text-decoration:underline">Not now</button>
+  </div>
+
+  <!-- Camera (full screen — AR real-time) -->
+  <div class="ar-half">
+    <video id="camera-feed" autoplay playsinline muted></video>
+    <canvas id="ar-canvas"></canvas>
+  </div>
+
+  <!-- No Camera -->
+  <div class="no-cam" id="no-cam" style="display:none">
+    <div class="no-cam-icon">📷</div>
+    <h2>Camera Required</h2>
+    <p>Allow camera access to use AR Navigation. Point your camera at QR codes placed at each building.</p>
+    <p style="font-size:12px;color:rgba(255,255,255,.6);margin-bottom:16px" id="no-cam-reason"></p>
+    <button onclick="initCamera()" style="margin-bottom:10px">Try Again</button>
+    <button onclick="openInBrowser()" style="background:transparent;border:1.5px solid rgba(255,255,255,.3);color:rgba(255,255,255,.85);padding:10px 24px;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer">Open in Chrome / Safari</button>
+  </div>
+
+  <!-- GPS dot -->
+  <div class="gps-dot" id="gps-dot"></div>
+
+  <!-- Compass -->
+  <div class="compass" id="compass">
+    <svg class="compass-needle" viewBox="0 0 28 28" id="compass-needle">
+      <polygon points="14,2 18,12 14,10 10,12" fill="#ef4444"/>
+      <polygon points="14,26 10,16 14,18 18,16" fill="#ffd700"/>
+    </svg>
+  </div>
+
+  <!-- Top Bar -->
+  <div class="topbar" id="topbar" style="display:none">
+    <button class="topbar-btn" onclick="goHome()" aria-label="Back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span class="topbar-title" id="topbar-title">CSU-A AR Navigation</span>
+    <button class="topbar-btn" onclick="openSearch()" aria-label="Search" title="Search destination">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+    <span class="topbar-badge" id="topbar-badge">ONLINE</span>
+  </div>
+
+  <!-- Top Nav (destination + steps at top) -->
+  <div class="nav-top" id="nav-top">
+    <div class="nav-banner">
+      <div class="dir-icon" id="dir-icon"></div>
+      <div class="nav-banner-main">
+        <div class="panel-name" id="p-name"></div>
+        <div class="dir-text" id="dir-text"></div>
+        <div class="target-meta" id="target-meta">TARGET --</div>
+      </div>
+      <button class="btn-scan-mini ghost" id="voice-btn" onclick="toggleVoice()" title="Voice guide">
+        <svg id="voice-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+      </button>
+    </div>
+    <div class="stats-row">
+      <div class="stat big"><div class="stat-val" id="s-dist">--</div><div class="stat-lbl">Distance</div></div>
+      <div class="stat"><div class="stat-val" id="s-time">--</div><div class="stat-lbl">Time</div></div>
+      <div class="stat"><div class="stat-val" id="s-gps">--</div><div class="stat-lbl">GPS</div></div>
+      <div class="stat"><div class="stat-val" id="s-alt">--</div><div class="stat-lbl">Alt</div></div>
+    </div>
+    <div class="gps-readout" id="gps-readout">
+      <span>LAT --</span><span>LNG --</span><span>ALT --</span>
+    </div>
+  </div>
+
+  <!-- Arrival -->
+  <div class="arrival" id="arrival">
+    <div class="arrival-circle">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#002855" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h2>You've Arrived!</h2>
+    <p id="arrival-msg"></p>
+    <div class="fb-area" id="fb-area">
+      <div id="fb-question">
+        <div class="fb-stars" id="fb-stars">
+          <span class="fb-star" data-star="1">&#9733;</span>
+          <span class="fb-star" data-star="2">&#9733;</span>
+          <span class="fb-star" data-star="3">&#9733;</span>
+          <span class="fb-star" data-star="4">&#9733;</span>
+          <span class="fb-star" data-star="5">&#9733;</span>
+        </div>
+        <div class="fb-label" id="fb-label">How was the guidance?</div>
+        <div class="fb-msg-wrap">
+          <textarea class="fb-msg" id="fb-msg" rows="2" maxlength="300" placeholder="Care to add a note? (optional)"></textarea>
+          <div class="fb-count" id="fb-count">0/300</div>
+        </div>
+        <div class="fb-actions">
+          <button class="fb-submit" id="fb-submit" onclick="submitFeedback()" disabled>
+            <span class="fb-spinner" id="fb-spinner"></span>
+            <svg class="fb-check" id="fb-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            <span class="fb-submit-txt" id="fb-submit-txt">Send Feedback</span>
+          </button>
+          <button class="fb-skip" onclick="skipFeedback()">Skip</button>
+        </div>
+      </div>
+      <div class="fb-thanks" id="fb-thanks" style="display:none">
+        <div class="fb-thanks-inner">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>Thanks for your feedback!</span>
+        </div>
+        <div class="fb-thanks-sub">Your rating helps other visitors find their way.</div>
+      </div>
+    </div>
+    <button onclick="finishNavigation()">Done</button>
+  </div>
+
+  <!-- Search Overlay -->
+  <div class="search-overlay" id="search-overlay">
+    <div class="search-header">
+      <button class="search-close" onclick="closeSearch()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2>Where to?</h2>
+    </div>
+    <div class="search-input-wrap">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" class="search-input" id="search-input" placeholder="Search building, office, or location..." autocomplete="off">
+    </div>
+    <div class="search-locate" id="search-locate" onclick="useMyLocation()" title="Allow your location to sort results by distance">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+      <span id="search-locate-text">Use my location to sort by distance</span>
+    </div>
+    <div class="search-results" id="search-results"></div>
+  </div>
+
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+    /* jsQR QR-scan library removed � search-only navigation */
+
+/* ================================================================
+   BUILDING DATA — CSU-A Campus
+   ================================================================ */
+const BUILDINGS = {
+
+  admin:       { name:'Administration Building', icon:'🏛️', loc:'Main campus entrance – Registrar, HRDO, Guidance, Finance', dist:'280m', time:'~4 min', lat:18.35123406520377, lng:121.64988793607472,
+    steps:['Start at the main entrance gate','Walk straight for 200m and turn left','Walk straight for 40m and turn left','Walk straight for 20m and turn right','Walk for 20m and the Administration Building is ahead'],
+    waypoints:[
+      {lat:18.351825411046327, lng:121.64978807763937, label:'Turn left'},
+      {lat:18.351461804646284, lng:121.64971911587419, label:'Turn left'},
+      {lat:18.351409532381442, lng:121.64990107264106, label:'Turn right'}
+    ],
+    aliases:['admin','registrar','hrdo','guidance','finance','admission'] },
+  cte:         { name:'College of Teacher Education', icon:'🎓', loc:'North campus wing', dist:'430m', time:'~5 min', lat:18.352268721573235, lng:121.64765987770043,
+    steps:['Start at the main entrance','Walk straight for 430m and CTE Building is ahead'],
+    aliases:['cte','teacher','education','teaching'] },
+  gymplex:     { name:'Gymplex', icon:'🏀', loc:'North campus – Gymnasium Complex', dist:'217m', time:'~3 min', lat:18.352380544084607, lng:121.65024011381233,
+    steps:['Start at the main entrance','Walk straight for 150m and turn right','Walk straight for 50m, then bear a little left','Walk for 17m and the Gymplex is ahead'],
+    waypoints:[
+      {lat:18.351816240528287, lng:121.65027829464744, label:'Turn right'},
+      {lat:18.352266318463634, lng:121.650356714548, label:'Bear a little left'}
+    ],
+    aliases:['gymplex','gym','gymnasium','sports','basketball'] },
+  gatchalian:  { name:'Gatchalian Building', icon:'🏢', loc:'North campus – Gatchalian Hall', dist:'240m', time:'~3 min', lat:18.352329598700887, lng:121.6505757211261,
+    steps:['Start at the main entrance','Turn left at the first intersection','Turn left again at the second intersection','Gatchalian Building is ahead – You have arrived to your destination'],
+    waypoints:[
+      {lat:18.35181949034487, lng:121.65026805406575, label:'First turn left'},
+      {lat:18.352278201217583, lng:121.65036764132986, label:'Second turn left'}
+    ],
+    aliases:['gatchalian','hall'] },
+  cics:        { name:'College of Information & Computing Sciences', icon:'💻', loc:'Central campus – CICS Building', dist:'120m', time:'~2 min', lat:18.351815552894948, lng:121.65053465617872,
+    steps:['Start at the main entrance','Walk straight for 120m and CICS Building is ahead'],
+    aliases:['cics','computer','it','information','computing','technology'] },
+  library:     { name:'Library Building', icon:'📚', loc:'Central campus – Learning Resource Center', dist:'185m', time:'~2 min', lat:18.351735368388443, lng:121.64992893110352,
+    steps:['Start at the main entrance','Walk straight for 185m and Library is ahead'],
+    aliases:['library','books','study','lrc','learning'] },
+  avr:         { name:'AVR Building', icon:'🎬', loc:'Central campus – Audio Visual Room', dist:'168m', time:'~2 min', lat:18.351438787450356, lng:121.65031967108017,
+    steps:['Start at the main entrance','Walk straight for 134m and turn left','Walk straight for 20m, then bear a little left','Walk for 14m and the AVR Building is ahead'],
+    waypoints:[
+      {lat:18.351699942197545, lng:121.65040702249051, label:'Turn left'},
+      {lat:18.351563427984562, lng:121.65028840494261, label:'Bear a little left'}
+    ],
+    aliases:['avr','audio','visual','presentation','media'] },
+  canteen:     { name:'Canteen / Food Court', icon:'🍜', loc:'North-west campus – Dining Hall', dist:'265m', time:'~3 min', lat:18.35253551058823, lng:121.64998765796611,
+    steps:['Start at the main entrance','Walk straight for 191m and turn right','Walk straight for 57m, then bear a little left','Walk for 17m and the Canteen is ahead'],
+    waypoints:[
+      {lat:18.351871773158724, lng:121.64989222592551, label:'Turn right'},
+      {lat:18.35237485224993, lng:121.64999384514299, label:'Bear a little left'}
+    ],
+    aliases:['canteen','food','eat','dining','court','lunch','meal'] },
+  cit:         { name:'CIT Building', icon:'🔧', loc:'West campus – College of Industrial Technology', dist:'287m', time:'~4 min', lat:18.352166160870844, lng:121.6490121022558,
+    steps:['Start at the main entrance','Walk straight for 287m and CIT Building is ahead'],
+    aliases:['cit','industrial','technology','technical'] },
+  cbea:        { name:'CBEA Building', icon:'📊', loc:'West campus – College of Business & Accountancy', dist:'332m', time:'~4 min', lat:18.352309606371012, lng:121.64859456291032,
+    steps:['Start at the main entrance','Walk straight for 332m and CBEA Building is ahead'],
+    aliases:['cbea','business','accountancy','accounting','commerce'] },
+  infra:       { name:'Infrastructure Office', icon:'🏗️', loc:'Far west campus – Pond Pavilion area', dist:'522m', time:'~7 min', lat:18.35264337189176, lng:121.64714727045033,
+    steps:['Start at the main entrance','Walk straight for 455m and turn right','Walk straight for 33m and turn left','Walk for 34m and the Infrastructure Office is ahead'],
+    waypoints:[
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn right'},
+      {lat:18.35258222861205, lng:121.64748012504195, label:'Turn left'}
+    ],
+    aliases:['infra','infrastructure','engineering','pond','pavilion'] },
+  dnst:        { name:'DNST Building', icon:'⛰️', loc:'Hilltop campus', dist:'589m', time:'~8 min', lat:18.353480696371406, lng:121.64774568310278,
+    steps:['Start at the main entrance','Walk straight for 455m and turn right','Walk straight for 74m, then bear a little right','Walk for 60m and DNST Building is ahead'],
+    waypoints:[
+      {lat:18.3522759930624, lng:121.64741698353707, label:'Turn right'},
+      {lat:18.35295029908013, lng:121.64751226814704, label:'Bear a little right'}
+    ],
+    aliases:['dnst','hilltop','mountain'] },
+  oldadmin:    { name:'Old Admin Building', icon:'🏚️', loc:'West campus', dist:'490m', time:'~6 min', lat:18.35223673608025, lng:121.64742101450098,
+    steps:['Start at the main entrance','Walk straight for 455m, then bear a little left','Walk for 35m and the Old Admin Building is ahead'],
+    waypoints:[
+      {lat:18.35223673608025, lng:121.64742101450098, label:'Bear a little left'}
+    ],
+    aliases:['oldadmin','old','administration'] },
+  hatchery:    { name:'Hatchery', icon:'🐟', loc:'South-west campus – Fish Hatchery', dist:'618m', time:'~8 min', lat:18.35137294211255, lng:121.64664869451029,
+    steps:['Start at the main entrance','Walk straight for 460m and turn left','Walk straight for 104m and turn right','Walk for 54m and the Hatchery is ahead'],
+    waypoints:[
+      {lat:18.35223664785317, lng:121.64737933717946, label:'Turn left'},
+      {lat:18.351317645893104, lng:121.64716280870135, label:'Turn right'}
+    ],
+    aliases:['hatchery','fish','aquaculture','pond'] },
+  icrm:        { name:'ICRM Building', icon:'🌊', loc:'South campus – Institute of Coastal Resource Mgmt', dist:'479m', time:'~6 min', lat:18.350865258912254, lng:121.64821087462468,
+    steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 135m and turn left','Walk for 25m and the ICRM Building is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.351089587757734, lng:121.64823818399485, label:'Turn left'}
+    ],
+    aliases:['icrm','coastal','marine','ocean','resource'] },
+  ceo_cottage: { name:"CEO's Cottage", icon:'🏠', loc:'Central campus – near Administration', dist:'424m', time:'~5 min', lat:18.35063356688629, lng:121.64877553002664,
+    steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 65m and turn left','Walk for 40m and the CEO\'s Cottage is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.350975365868003, lng:121.64888147199309, label:'Turn left'}
+    ],
+    aliases:['ceo','cottage','president'] },
+  villa1:      { name:'Executive Villa 1', icon:'🏡', loc:'Central campus', dist:'400m', time:'~5 min', lat:18.35084035094204, lng:121.64882696934423,
+    steps:['Start at the main entrance','Walk straight for 211m and turn left','Walk straight for 108m and turn right','Walk straight for 65m and turn left','Walk for 16m and Executive Villa 1 is ahead'],
+    waypoints:[
+      {lat:18.351834694825815, lng:121.64970389343404, label:'Turn left'},
+      {lat:18.350877894053415, lng:121.64950013928764, label:'Turn right'},
+      {lat:18.350975365868003, lng:121.64888147199309, label:'Turn left'}
+    ],
+    aliases:['villa','executive'] },
+  dorm:        { name:"Lecturer's Dormitory", icon:'🛏️', loc:'South campus – Faculty Dormitory', dist:'341m', time:'~4 min', lat:18.35064877426767, lng:121.6495550296666,
+    steps:['Start at the main entrance','Walk straight for 206m and turn left','Walk for 135m and the Lecturer\'s Dormitory is ahead'],
+    waypoints:[
+      {lat:18.351837422912563, lng:121.64975081332878, label:'Turn left'}
+    ],
+    aliases:['dorm','dormitory','faculty','housing','lodging'] }
+};
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let stream = null;
+let arCtx = null;
+let arW = 0, arH = 0;
+let animFrame = null;
+
+let dest = null;          // current building key
+let stepIdx = 0;          // current step index
+let startDist = 0;        // GPS distance from first fix to destination (for step auto-advance)
+let gpsPos = null;        // {lat, lng, acc, alt, altAcc}
+let heading = 0;          // smoothed compass heading degrees
+let rawHeading = -1;      // last raw compass reading (for smoothing)
+let cameraPitch = 0;      // camera optical-axis pitch relative to the horizon
+let rawPitch = null;
+let bearing = 0;          // bearing to ACTIVE waypoint degrees
+let distToDest = 0;       // metres to final destination
+let distToTarget = 0;     // metres to ACTIVE waypoint
+let verticalAngle = 0;    // elevation angle to ACTIVE waypoint
+let targetAltitude = null;
+let elevationRequestId = 0;
+let userSpeed = 1.4;      // walking speed m/s estimate
+let lastGpsTime = 0;
+let lastGpsDist = 0;
+let gpsWatchId = null;
+let gpsRetries = 0;       // consecutive GPS failures before retry
+let gpsAsked = false;     // true once location permission has been requested
+const GPS_MAX_RETRIES = 6;
+let orientationListener = null;
+let compassInstalled = false;  // true once the orientation listener is attached
+let arrived = false;
+
+// Voice guide (text-to-speech step announcements)
+let voiceOn = true;
+let voicesReady = false;
+
+// AR animation state
+let arTime = 0;
+let arBob = 0;
+let arrowRotation = 0;    // smooth target rotation
+let currentArrowRot = 0;  // interpolated
+
+/* ================================================================
+   INIT
+   ================================================================ */
+window.addEventListener('load', async () => {
+  const params = new URLSearchParams(location.search);
+  const d = params.get('dest');
+
+  if (d && BUILDINGS[d]) {
+    // iOS Safari blocks camera + GPS unless triggered by a user tap.
+    const gate = document.getElementById('start-gate');
+    gate.style.display = 'flex';
+    // If location was allowed on a previous visit, open it automatically.
+    tryAutoGPS(false);
+  } else {
+    // Entry without a direct link: show the destination search first and let
+    // the user start location themselves (Locate me button / picking a result),
+    // so the search screen is not blocked by a permission pop-up. If location
+    // was already allowed, tracking starts automatically right away.
+    if (gpsPos) renderSearchResults('');
+    hideLoading();
+    openSearch();
+  }
+
+  // Show the camera / location permission state up front so users know whether
+  // the browser will ask, already allowed it, or has it blocked.
+  checkPermissionStates();
+});
+
+function tryAutoGPS(showPrompt) {
+  if (!navigator.geolocation) return;
+  if (typeof navigator.permissions !== 'undefined' && typeof navigator.permissions.query === 'function') {
+    navigator.permissions.query({ name: 'geolocation' }).then(s => {
+      if (s.state === 'granted') {
+        startGPS();                 // already allowed -> open the location automatically
+      } else if (s.state === 'prompt' && showPrompt) {
+        showGpsGate();              // needs a tap -> ask for permission
+      }
+    }).catch(() => {});
+  }
+}
+
+function showGpsGate() {
+  document.getElementById('gps-gate').style.display = 'flex';
+}
+
+function dismissGpsGate() {
+  document.getElementById('gps-gate').style.display = 'none';
+}
+
+function allowGps() {
+  dismissGpsGate();
+  startGPS(); // called inside the button's tap so the permission dialog appears
+}
+
+function updateGpsDisplay() {
+  const el = document.getElementById('s-gps');
+  if (el) el.textContent = gpsPos ? (gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : 'GPS') : 'Locating…';
+}
+
+function hideLoading() {
+  document.getElementById('loading').classList.add('hidden');
+}
+
+async function queryPerm(name) {
+  try {
+    if (!navigator.permissions || !navigator.permissions.query) return 'unsupported';
+    const s = await navigator.permissions.query({ name });
+    return s.state;
+  } catch (e) {
+    return 'unsupported';
+  }
+}
+
+function setPermStatus(id, state) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (state === 'granted') { el.textContent = '✓ allowed'; el.style.color = '#22c55e'; }
+  else if (state === 'denied') { el.textContent = '✕ blocked'; el.style.color = '#f87171'; }
+  else { el.textContent = 'will ask'; el.style.color = '#94a3b8'; }
+}
+
+async function checkPermissionStates() {
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+
+  const hint = document.getElementById('gate-hint');
+  if (!hint) return;
+  const bad = [];
+  if (cam === 'denied') bad.push('Camera is blocked');
+  if (loc === 'denied') bad.push('Location is blocked');
+  if (bad.length) {
+    hint.innerHTML = '⚠️ ' + bad.join(' · ') + '. Open Chrome ▸ ⋮ ▸ Site settings to allow, then tap Allow.';
+  } else if (cam === 'granted' && loc === 'granted') {
+    hint.innerHTML = 'Camera and location are already allowed — Chrome won\'t ask again. Tap Allow to open AR.';
+  }
+}
+
+function enterFromGate() {
+  const gate = document.getElementById('start-gate');
+  if (gate) gate.style.display = 'none';
+  const d = new URLSearchParams(location.search).get('dest');
+  if (!dest && d && BUILDINGS[d]) setDestination(d);
+}
+
+const GATE_BTN_HTML =
+  '<button onclick="blockPermissions()" style="flex:1;background:rgba(255,255,255,.14);color:#fff;border:none;padding:14px 0;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Block</button>' +
+  '<button onclick="allowPermissions()" style="flex:1;background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 0;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(255,215,0,.3)">Allow</button>';
+
+function resetGateButtons(hintText) {
+  const btns = document.getElementById('gate-btns');
+  if (btns) btns.innerHTML = GATE_BTN_HTML;
+  const hint = document.getElementById('gate-hint');
+  if (hint) hint.innerHTML = hintText || '';
+}
+
+function retryPerms() {
+  resetGateButtons('Please allow the Camera and Location prompts your browser shows.');
+  setPermStatus('perm-camera', 'prompt');
+  setPermStatus('perm-location', 'prompt');
+  allowPermissions();
+}
+
+function showGateFailure(camOK, locState) {
+  const missing = [];
+  if (!camOK) missing.push('Camera');
+  if (locState !== 'granted') missing.push('Location/GPS');
+  const btns = document.getElementById('gate-btns');
+  if (btns) {
+    btns.innerHTML =
+      '<button onclick="retryPerms()" style="flex:1;background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 0;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Retry permissions</button>' +
+      '<button onclick="enterFromGate()" style="flex:1;background:rgba(255,255,255,.14);color:#fff;border:none;padding:14px 0;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer">Continue anyway</button>';
+  }
+  const hint = document.getElementById('gate-hint');
+  if (hint) {
+    hint.innerHTML =
+      '<b style="color:#fbbf24">' + missing.join(' & ') + ' is not allowed.</b><br>' +
+      'To be asked again, open Chrome ▸ ⋮ ▸ Site settings ▸ ' + (missing.join(' / ')) + ' ▸ "Ask first" or Allow.<br>' +
+      '<small>Once allowed, Chrome remembers it and will not re-ask.</small>';
+  }
+  showToast('Allow camera & location to start AR');
+}
+
+function blockPermissions() {
+  setPermStatus('perm-camera', 'denied');
+  setPermStatus('perm-location', 'denied');
+  const btns = document.getElementById('gate-btns');
+  if (btns) {
+    btns.innerHTML =
+      '<button onclick="retryPerms()" style="flex:1;background:linear-gradient(135deg,#ffd700,#ffe44d);color:#002855;border:none;padding:14px 0;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer">I want to allow</button>' +
+      '<button onclick="enterFromGate()" style="flex:1;background:rgba(255,255,255,.14);color:#fff;border:none;padding:14px 0;border-radius:14px;font-size:13px;font-weight:700;cursor:pointer">Continue without</button>';
+  }
+  const hint = document.getElementById('gate-hint');
+  if (hint) {
+    hint.innerHTML = 'You blocked camera and location. AR needs both to guide you.<br>' +
+      'Tap "I want to allow" to enable them, or "Continue without" for step-by-step text directions only.';
+  }
+}
+
+async function allowPermissions() {
+  const hint = document.getElementById('gate-hint');
+  if (hint) hint.textContent = 'Please allow the Camera and Location prompts your browser shows.';
+
+  // 1) Ask for location SYNCHRONOUSLY inside this tap. iOS/Android hide the
+  //    permission dialog if geolocation is requested after the async camera
+  //    setup, so the GPS prompt must happen before the await below.
+  startGPS();
+
+  // 1b) Ask for the compass (device orientation) in the same tap so the
+  //    navigation arrow can rotate on iOS too.
+  requestCompassPermission();
+
+  // 2) Camera permission (the dialog queues behind the location one on iOS).
+  const camOK = await initCamera();
+
+  // Show what actually happened after the browser prompts appear.
+  const cam = await queryPerm('camera');
+  const loc = await queryPerm('geolocation');
+  setPermStatus('perm-camera', cam);
+  setPermStatus('perm-location', loc);
+
+  if (camOK && loc === 'granted') {
+    // Everything allowed — open AR navigation automatically.
+    enterFromGate();
+    return;
+  }
+
+  showGateFailure(camOK, loc);
+}
+
+async function initCamera() {
+  const loading = document.getElementById('loading');
+  const noCam = document.getElementById('no-cam');
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:1280}, height:{ideal:720} },
+      audio: false
+    });
+    const video = document.getElementById('camera-feed');
+    video.srcObject = stream;
+    await video.play();
+
+    const canvas = document.getElementById('ar-canvas');
+    arCtx = canvas.getContext('2d');
+    handleResize();
+    window.addEventListener('resize', handleResize);
+
+    renderLoop();
+    loading.classList.add('hidden');
+    noCam.style.display = 'none';
+    document.getElementById('topbar').style.display = 'flex';
+    return true;
+  } catch (e) {
+    console.error('Camera init failed:', e);
+    loading.classList.add('hidden');
+    noCam.style.display = 'flex';
+    const reason = document.getElementById('no-cam-reason');
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      reason.textContent = 'Camera permission was denied or blocked. Tap "Open in Chrome / Safari" below to open in your full browser.';
+    } else if (e.name === 'NotFoundError') {
+      reason.textContent = 'No camera found on this device.';
+    } else {
+      reason.textContent = 'Camera error: ' + e.message;
+    }
+    return false;
+  }
+}
+
+function openInBrowser() {
+  const url = location.href;
+  // Android: use intent to open in Chrome
+  const ua = navigator.userAgent || '';
+  if (/android/i.test(ua)) {
+    location.href = 'intent://open?url=' + encodeURIComponent(url) + '#Intent;scheme=https;package=com.android.chrome;end';
+    // Fallback: just navigate to URL normally (might still work if Chrome is default)
+    setTimeout(() => { location.href = url; }, 500);
+  } else {
+    // iOS / other: just reload — user can "Open in Safari" from share sheet
+    // Show instructions
+    const reason = document.getElementById('no-cam-reason');
+    reason.innerHTML = '<strong>On iPhone:</strong> Tap the Share button (square+arrow) → "Open in Safari"<br><strong>On Android:</strong> Tap the 3-dot menu → "Open in Chrome"';
+  }
+}
+
+function handleResize() {
+  const dpr = window.devicePixelRatio || 1;
+  arW = window.innerWidth;
+  arH = Math.floor(window.innerHeight); // AR camera is full screen
+  const c = document.getElementById('ar-canvas');
+  c.width = arW * dpr;
+  c.height = arH * dpr;
+  c.style.width = arW + 'px';
+  c.style.height = arH + 'px';
+  if (arCtx) arCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+/* ================================================================
+   GPS TRACKING
+   ================================================================ */
+function startGPS() {
+  if (!navigator.geolocation) {
+    document.getElementById('gps-dot').classList.add('show');
+    showToast('GPS not supported on this device');
+    return;
+  }
+  if (gpsAsked) return; // already requested / tracking
+  gpsAsked = true;
+  gpsRetries = 0;
+
+  // Show that we are trying to open the location automatically.
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show');
+  dot.classList.remove('on');
+  updateGpsDisplay();
+
+  // One-shot request first: this triggers the location permission dialog while
+  // we are still inside the user gesture that called startGPS() (iOS will not
+  // show it otherwise). Once the user grants access and we have the first fix
+  // we switch to continuous tracking via watchGPS().
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      onGpsCoords(pos.coords);
+      watchGPS();
+    },
+    err => {
+      if (err && err.code === 1) {
+        onGpsError(err);
+      } else {
+        // No fix yet / timeout — still try continuous tracking; the permission
+        // prompt (if any) has already been shown, so watchPosition is safe now.
+        watchGPS();
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+  );
+}
+
+function onGpsCoords(c) {
+  gpsRetries = 0;
+  const now = Date.now();
+  const newLat = c.latitude;
+  const newLng = c.longitude;
+  const newAcc = Number.isFinite(c.accuracy) ? c.accuracy : 999;
+
+  // Ignore impossible/clearly unusable fixes instead of letting them jump the
+  // route or falsely trigger a waypoint.
+  if (!Number.isFinite(newLat) || !Number.isFinite(newLng) ||
+      Math.abs(newLat) > 90 || Math.abs(newLng) > 180) return;
+
+  if (gpsPos) {
+    const d = haversine(gpsPos.lat, gpsPos.lng, newLat, newLng);
+    const dt = (now - lastGpsTime) / 1000;
+    if (dt > 0 && d > 2) {
+      const measured = d / dt;
+      if (measured >= 0.3 && measured <= 3.0) {
+        userSpeed = userSpeed * 0.75 + measured * 0.25;
+      }
+    }
+  }
+
+  gpsPos = {
+    lat: newLat,
+    lng: newLng,
+    acc: newAcc,
+    alt: (c.altitude !== null && c.altitude !== undefined && isFinite(c.altitude)) ? c.altitude : null,
+    altAcc: (c.altitudeAccuracy !== null && c.altitudeAccuracy !== undefined && isFinite(c.altitudeAccuracy)) ? c.altitudeAccuracy : null
+  };
+
+  const readout = document.getElementById('gps-readout');
+  if (readout) {
+    const altText = Number.isFinite(gpsPos.alt) ? gpsPos.alt.toFixed(1) + 'm' : '--';
+    readout.innerHTML =
+      '<span>LAT ' + gpsPos.lat.toFixed(6) + '</span>' +
+      '<span>LNG ' + gpsPos.lng.toFixed(6) + '</span>' +
+      '<span>ALT ' + altText + '</span>';
+  }
+  lastGpsTime = now;
+
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show', 'on');
+
+  // A fix arrived — hide the permission gate and show the live accuracy.
+  dismissGpsGate();
+  updateGpsDisplay();
+
+  if (!startDist && dest) {
+    startDist = haversine(newLat, newLng, BUILDINGS[dest].lat, BUILDINGS[dest].lng);
+  }
+
+  if (dest) updateDistanceAndBearing();
+
+  // Live re-sort of any open search results by real distance.
+  const searchOverlay = document.getElementById('search-overlay');
+  if (searchOverlay && !searchOverlay.classList.contains('hidden')) {
+    const input = document.getElementById('search-input');
+    renderSearchResults(input.value);
+  }
+}
+
+function onGpsError(err) {
+  console.warn('GPS error:', err && err.code, err && err.message);
+  const dot = document.getElementById('gps-dot');
+  dot.classList.add('show');
+  dot.classList.remove('on');
+  if (err && err.code === 1) {
+    showToast('Location permission blocked. Enable Location for your browser.');
+  } else if (gpsRetries < GPS_MAX_RETRIES) {
+    gpsRetries++;
+    setTimeout(watchGPS, 3000);
+  } else {
+    showToast('Weak GPS signal. Move to an open area and follow the steps.');
+  }
+}
+
+function watchGPS() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => onGpsCoords(pos.coords),
+    err => onGpsError(err),
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+  );
+}
+
+function stopGPS() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+}
+
+function updateArrowRotation() {
+  if (!gpsPos || !dest) return;
+  const diff = normalizeAngle(bearing - heading);
+  arrowRotation = (diff * Math.PI) / 180;
+}
+
+// Each waypoint is a real WGS84 coordinate. The active target changes only after
+// the user's live GPS fix enters the waypoint's acceptance radius.
+function targetForStep() {
+  const b = BUILDINGS[dest];
+  if (!b) return null;
+  const wps = b.waypoints || [];
+  const idx = Math.min(stepIdx, wps.length);
+  return idx < wps.length ? wps[idx] : b;
+}
+
+function getTargetAltitude(t) {
+  if (!t) return null;
+  if (Number.isFinite(t.alt)) return t.alt;
+  const b = BUILDINGS[dest];
+  if (b && Number.isFinite(b.alt)) return b.alt;
+  return null;
+}
+
+function updateDistanceAndBearing() {
+  if (!gpsPos || !dest) return;
+  const b = BUILDINGS[dest];
+  const t = targetForStep() || b;
+
+  distToDest = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+  distToTarget = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
+
+  // Horizontal bearing is always calculated from the user's CURRENT GPS fix
+  // to the ACTIVE waypoint. This prevents the arrow from being locked to the
+  // original starting position.
+  bearing = calcBearing(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
+
+  // Vertical AR component: only trust it when both ends have elevation data and
+  // the user's reported altitude has a reasonable accuracy.
+  targetAltitude = getTargetAltitude(t);
+  if (Number.isFinite(targetAltitude) &&
+      Number.isFinite(gpsPos.alt) &&
+      (!gpsPos.altAcc || gpsPos.altAcc <= 25)) {
+    verticalAngle = Math.atan2(
+      targetAltitude - gpsPos.alt,
+      Math.max(1, distToTarget)
+    );
+  } else {
+    verticalAngle = 0;
+  }
+
+  // Update stats from LIVE GPS, never from hard-coded distance/time values.
+  document.getElementById('s-dist').textContent =
+    distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest / 1000).toFixed(1) + 'km';
+  const eta = Math.max(1, Math.round(distToDest / Math.max(0.7, userSpeed) / 60));
+  document.getElementById('s-time').textContent = '~' + eta + ' min';
+  document.getElementById('s-gps').textContent =
+    gpsPos.acc ? '±' + Math.round(gpsPos.acc) + 'm' : '--';
+  const sAlt = document.getElementById('s-alt');
+  if (sAlt) {
+    sAlt.textContent = Number.isFinite(gpsPos.alt)
+      ? Math.round(gpsPos.alt) + 'm'
+      : '--';
+  }
+
+  updateArrowRotation();
+  autoAdvanceSteps();
+
+  // Arrival is based on the destination coordinate, with a radius that respects
+  // the actual GPS uncertainty. Do not claim arrival from a single noisy fix.
+  const arriveAt = Math.max(8, Math.min(25, (gpsPos.acc || 10) * 0.8));
+  if (distToDest <= arriveAt && !arrived) {
+    triggerArrival();
+  }
+}
+
+function autoAdvanceSteps() {
+  if (!dest || arrived || !gpsPos) return;
+  const b = BUILDINGS[dest];
+  const wps = b.waypoints || [];
+  if (!wps.length || stepIdx >= wps.length) return;
+
+  const t = wps[stepIdx];
+  const d = haversine(gpsPos.lat, gpsPos.lng, t.lat, t.lng);
+
+  // Use GPS uncertainty, but cap the radius so a very poor fix does not skip
+  // several turns at once.
+  const arriveAt = Math.max(8, Math.min(20, (gpsPos.acc || 10) * 0.75));
+  if (d <= arriveAt) {
+    stepIdx = Math.min(stepIdx + 1, wps.length);
+    refreshUI();
+
+    if (stepIdx < b.steps.length) {
+      showToast('Next: ' + b.steps[stepIdx]);
+      speak(b.steps[stepIdx]);
+    }
+    // Immediately recompute the bearing to the NEW active waypoint.
+    updateDistanceAndBearing();
+  }
+}
+
+function triggerArrival() {
+  arrived = true;
+  resetFeedbackUI();
+  const b = BUILDINGS[dest];
+  document.getElementById('arrival-msg').textContent = 'You have reached ' + b.name;
+  document.getElementById('arrival').classList.add('show');
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  showToast('You have arrived!');
+  speak('You have arrived at ' + b.name + '.');
+}
+
+/* ================================================================
+   COMPASS / ORIENTATION
+   ================================================================ */
+// Tilt-compensated compass heading from the W3C DeviceOrientation spec:
+// heading of the horizontal component of the vector pointing out the back of the screen.
+// Correct in any orientation (portrait/landscape/flat), unlike (360 - alpha),
+// which only works when the device is held flat.
+function tiltCompassHeading(alphaDeg, betaDeg, gammaDeg) {
+  const d2r = Math.PI / 180;
+  const x = betaDeg * d2r;
+  const y = gammaDeg * d2r;
+  const z = alphaDeg * d2r;
+  const cX = Math.cos(x), cY = Math.cos(y), cZ = Math.cos(z);
+  const sX = Math.sin(x), sY = Math.sin(y), sZ = Math.sin(z);
+  let Vx = -cZ * sY - sZ * sX * cY;
+  let Vy = -sZ * sY + cZ * sX * cY;
+  let h = Math.atan(Vx / Vy);
+  if (Vy < 0) h += Math.PI;
+  else if (Vx < 0) h += 2 * Math.PI;
+  return (h * (180 / Math.PI) + 360) % 360;
+}
+
+function startCompass() {
+  requestCompassPermission();
+}
+
+// Ask for device-orientation permission and install the listener. On iOS this
+// must run inside a user gesture (the start tap) or the prompt never appears.
+function requestCompassPermission() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(state => {
+      if (state === 'granted') installOrientationListener();
+    }).catch(() => {});
+  } else {
+    installOrientationListener();
+  }
+}
+
+function installOrientationListener() {
+  if (compassInstalled) return; // already listening
+  compassInstalled = true;
+  orientationListener = e => {
+    let h = 0;
+    if (e.webkitCompassHeading !== undefined) {
+      h = e.webkitCompassHeading; // iOS (and Chrome on Android) — works held upright
+    } else if (e.alpha !== null && e.beta !== null && e.gamma !== null) {
+      h = tiltCompassHeading(e.alpha, e.beta, e.gamma); // any orientation
+      if (!isFinite(h) || (Math.abs(e.beta) < 10 && Math.abs(e.gamma) < 10)) {
+        return; // device essentially flat — heading undefined/noisy, keep last good reading
+      }
+    }
+    // Smooth short-term jitter using the nearest arc so 359°->1° stays smooth
+    if (rawHeading >= 0) {
+      heading = heading + normalizeAngle(h - heading) * 0.35;
+    } else {
+      heading = h;
+    }
+    heading = (heading + 360) % 360;
+    rawHeading = h;
+
+    // Estimate the camera optical-axis pitch so elevation can move the AR
+    // target vertically. Portrait: beta≈90° means the phone/camera is level.
+    if (e.beta !== null && e.beta !== undefined && isFinite(e.beta)) {
+      const screenAngle = (screen.orientation && Number.isFinite(screen.orientation.angle))
+        ? screen.orientation.angle : (window.orientation || 0);
+      let p;
+      if (screenAngle === 180) p = e.beta - 90;
+      else if (Math.abs(screenAngle) === 90) p = (e.gamma || 0);
+      else p = 90 - e.beta;
+      p = Math.max(-80, Math.min(80, p));
+      cameraPitch = rawPitch === null ? p : rawPitch + (p - rawPitch) * 0.25;
+      rawPitch = p;
+    }
+
+    const needle = document.getElementById('compass-needle');
+    if (needle) needle.style.transform = 'rotate(' + (-heading) + 'deg)';
+
+    // Re-point the arrow immediately as the phone turns (not just on GPS fixes)
+    if (gpsPos && dest) updateArrowRotation();
+  };
+  window.addEventListener('deviceorientation', orientationListener, true);
+  document.getElementById('compass').classList.add('show');
+}
+
+function stopCompass() {
+  if (orientationListener) {
+    window.removeEventListener('deviceorientation', orientationListener, true);
+    orientationListener = null;
+  }
+  rawHeading = -1;
+  rawPitch = null;
+}
+
+/* ================================================================
+   DESTINATION / NAVIGATION
+   ================================================================ */
+async function loadRouteElevations(key) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  const points = [b, ...(b.waypoints || [])];
+  const lats = points.map(p => p.lat.toFixed(7)).join(',');
+  const lngs = points.map(p => p.lng.toFixed(7)).join(',');
+  const requestId = ++elevationRequestId;
+
+  try {
+    const url =
+      'https://api.open-meteo.com/v1/forecast' +
+      '?latitude=' + encodeURIComponent(lats) +
+      '&longitude=' + encodeURIComponent(lngs) +
+      '&current=temperature_2m&timezone=UTC';
+
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('Elevation HTTP ' + resp.status);
+    const data = await resp.json();
+    if (requestId !== elevationRequestId) return;
+
+    const rows = Array.isArray(data) ? data : [data];
+    rows.forEach((row, i) => {
+      const elevation = Number(row && row.elevation);
+      if (!Number.isFinite(elevation)) return;
+      points[i].alt = elevation;
+    });
+
+    if (dest === key) { refreshUI(); updateDistanceAndBearing(); }
+  } catch (e) {
+    // Horizontal GPS navigation remains fully functional if elevation lookup
+    // is unavailable/offline.
+    console.warn('Route elevation lookup unavailable:', e);
+  }
+}
+
+function setDestination(key) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  dest = key;
+  stepIdx = 0;
+  startDist = 0;
+  arrived = false;
+  arrowRotation = 0;
+  currentArrowRot = 0;
+  targetAltitude = null;
+  verticalAngle = 0;
+
+  setDestinationUI(key);
+  if (gpsPos) updateDistanceAndBearing();
+  // Load terrain elevation for the destination and every route waypoint.
+  // Latitude/longitude remain the authoritative navigation coordinates.
+  loadRouteElevations(key);
+
+  // Update URL
+  const u = new URL(location);
+  u.searchParams.set('dest', key);
+  history.replaceState({}, '', u);
+
+  // Start GPS + compass
+  startGPS();
+  startCompass();
+
+  // Voice guide: announce the destination and the first step
+  speak('Navigating to ' + b.name + '. ' + b.steps[0]);
+}
+
+function setDestinationUI(key) {
+  const b = BUILDINGS[key];
+  if (!b) return;
+
+  document.getElementById('topbar-title').textContent = b.name;
+  document.getElementById('topbar-badge').textContent = 'NAVIGATING';
+  document.getElementById('topbar-badge').classList.add('active');
+  document.getElementById('p-name').textContent = b.icon + ' ' + b.name;
+  document.getElementById('s-dist').textContent = b.dist;
+  document.getElementById('s-time').textContent = b.time;
+  document.getElementById('s-gps').textContent = gpsPos ? Math.round(gpsPos.acc || 0) + 'm' : 'No GPS';
+
+  refreshUI();
+
+  document.getElementById('nav-top').classList.add('show');
+  document.getElementById('compass').classList.add('show');
+}
+
+function refreshUI() {
+  if (!dest) return;
+  const b = BUILDINGS[dest];
+
+  // Direction sign — real turn (left / right / straight), not just a rotating arrow
+  const step = b.steps[stepIdx];
+  document.getElementById('dir-text').textContent = step;
+
+  const t = step.toLowerCase();
+  const turn = /\bleft\b/.test(t) ? 'left' : (/\bright\b/.test(t) ? 'right' : 'straight');
+
+  const TURN_ICONS = {
+    straight: '<svg viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+    left:     '<svg viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M13 19l-7-7 7-7"/></svg>',
+    right:    '<svg viewBox="0 0 24 24" fill="none" stroke="STROKE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M11 19l7-7-7-7"/></svg>'
+  };
+
+  const dirColors = { straight:'#fff3b0', left:'#dbeafe', right:'#fde68a' };
+  const dirStrokes = { straight:'#003d82', left:'#1a5faf', right:'#b45309' };
+  document.getElementById('dir-icon').style.background = dirColors[turn];
+  document.getElementById('dir-icon').innerHTML = TURN_ICONS[turn].replace('STROKE', dirStrokes[turn]);
+
+  const target = targetForStep();
+  const targetMeta = document.getElementById('target-meta');
+  if (targetMeta && target) {
+    const alt = Number.isFinite(target.alt) ? ' · ALT ' + target.alt.toFixed(1) + 'm' : '';
+    targetMeta.textContent =
+      'TARGET ' + target.lat.toFixed(6) + ', ' + target.lng.toFixed(6) + alt;
+  }
+
+  if (!gpsPos) {
+    // Without GPS, estimate remaining distance from the current step onward.
+    let remaining = 0;
+    for (let i = stepIdx; i < b.steps.length; i++) {
+      const m = /(\d+)m/i.exec(b.steps[i]);
+      if (m) remaining += parseInt(m[1], 10);
+    }
+    // Step 0 ("Start at the main entrance") has no length; fall back on declared dist.
+    if (remaining === 0) {
+      remaining = Math.max(1, b.steps.length - stepIdx) * 50;
+    }
+    document.getElementById('s-dist').textContent = Math.round(remaining) + 'm';
+    document.getElementById('s-time').textContent = '~' + Math.max(1, Math.round(remaining / (userSpeed * 60))) + ' min';
+  }
+}
+
+function finishNavigation() {
+  document.getElementById('arrival').classList.remove('show');
+  dest = null;
+  stepIdx = 0;
+  startDist = 0;
+  arrived = false;
+
+  document.getElementById('nav-top').classList.remove('show');
+  document.getElementById('compass').classList.remove('show');
+  document.getElementById('gps-dot').classList.remove('show');
+
+  document.getElementById('topbar-title').textContent = 'CSU-A AR Navigation';
+  document.getElementById('topbar-badge').textContent = 'ONLINE';
+  document.getElementById('topbar-badge').classList.remove('active');
+
+  history.replaceState({}, '', location.pathname);
+  stopCompass();
+
+  // Show search after finishing navigation
+  setTimeout(() => openSearch(), 500);
+}
+
+function goHome() {
+  if (dest) {
+    if (confirm('Stop navigation to ' + BUILDINGS[dest].name + '?')) {
+      finishNavigation();
+    }
+  } else {
+    openSearch();
+  }
+}
+
+/* ================================================================
+   AR RENDER LOOP
+   ================================================================ */
+function renderLoop(ts = 0) {
+  const dt = Math.min((ts - (renderLoop._last || 0)) / 1000, 0.1);
+  renderLoop._last = ts;
+  arTime = ts;
+
+  arCtx.clearRect(0, 0, arW, arH);
+
+  if (dest && !arrived) {
+    // Keep the visual guide locked to the center of the camera.
+    // GPS + compass still determine the rotation, but the marker itself
+    // never slides around the screen. This is calmer and much easier to follow.
+    const cx = arW / 2;
+    const cy = arH * 0.58;
+
+    // Smooth compass/GPS changes so the arrow does not twitch when the
+    // phone's heading fluctuates by a few degrees.
+    let angleDelta = normalizeAngle(
+      (arrowRotation - currentArrowRot) * 180 / Math.PI
+    ) * Math.PI / 180;
+    currentArrowRot += angleDelta * Math.min(1, dt * 8);
+
+    drawGroundGlow(cx, cy + 20, ts);
+    drawPulseRings(cx, cy, ts);
+    drawDistanceCircle(cx, cy);
+    drawNavigationArrow(cx, cy, currentArrowRot);
+
+    if (distToDest > 0) {
+      drawARDistanceLabel(cx, cy + 82);
+    }
+  }
+
+  animFrame = requestAnimationFrame(renderLoop);
+}
+
+function projectTargetToScreen() {
+  const centerX = arW / 2;
+  const centerY = arH * 0.58;
+
+  if (!gpsPos || !dest) return { x: centerX, y: centerY };
+
+  const horizontalDiff = normalizeAngle(bearing - heading);
+  const hFov = 70 * Math.PI / 180;
+  const vFov = 55 * Math.PI / 180;
+
+  // Perspective-style angular projection. Clamp to the camera edges so a
+  // target behind/at the extreme side remains visible as an off-screen cue.
+  const xNorm = Math.tan(horizontalDiff * Math.PI / 180) / Math.tan(hFov / 2);
+  const x = Math.max(34, Math.min(arW - 34, centerX + xNorm * (arW / 2)));
+
+  const relativeElevation = verticalAngle - (cameraPitch * Math.PI / 180);
+  const yNorm = Math.tan(relativeElevation) / Math.tan(vFov / 2);
+  const y = Math.max(arH * 0.20, Math.min(arH * 0.82, centerY - yNorm * (arH / 2)));
+
+  return { x, y };
+}
+
+function drawNavigationArrow(x, y, angle) {
+  arCtx.save();
+  arCtx.translate(x, y);
+  arCtx.rotate(angle);
+
+  // Drop shadow
+  arCtx.shadowColor = 'rgba(0,0,0,0.45)';
+  arCtx.shadowBlur = 18;
+  arCtx.shadowOffsetY = 4;
+
+  // Thick directional arrow (classic compass/navigation arrow shape)
+  arCtx.beginPath();
+  arCtx.moveTo(0, -52);          // tip
+  arCtx.lineTo(24, -6);          // right wing outer
+  arCtx.lineTo(10, -6);          // right wing inner
+  arCtx.lineTo(10, 44);          // right shaft
+  arCtx.lineTo(-10, 44);         // right shaft bottom
+  arCtx.lineTo(-10, -6);         // left shaft
+  arCtx.lineTo(-24, -6);         // left wing inner
+  arCtx.closePath();             // back to tip
+
+  const grad = arCtx.createLinearGradient(0, -52, 0, 44);
+  grad.addColorStop(0, '#a5c8ff');
+  grad.addColorStop(0.35, '#1a5faf');
+  grad.addColorStop(1, '#003d82');
+  arCtx.fillStyle = grad;
+  arCtx.fill();
+
+  arCtx.shadowBlur = 0;
+  arCtx.shadowOffsetY = 0;
+
+  // White border
+  arCtx.lineJoin = 'round';
+  arCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+  arCtx.lineWidth = 3;
+  arCtx.stroke();
+
+  // Inner highlight
+  arCtx.beginPath();
+  arCtx.moveTo(0, -40);
+  arCtx.lineTo(14, -8);
+  arCtx.lineTo(6, -8);
+  arCtx.lineTo(6, 34);
+  arCtx.lineTo(-6, 34);
+  arCtx.lineTo(-6, -8);
+  arCtx.lineTo(-14, -8);
+  arCtx.closePath();
+  arCtx.fillStyle = 'rgba(255,255,255,0.22)';
+  arCtx.fill();
+
+  arCtx.restore();
+}
+
+function drawPulseRings(x, y, t) {
+  arCtx.save();
+  for (let i = 0; i < 3; i++) {
+    const phase = ((t / 1200) + i * 0.33) % 1;
+    const r = 55 + phase * 50;
+    const a = (1 - phase) * 0.35;
+    arCtx.beginPath();
+    arCtx.arc(x, y, r, 0, Math.PI * 2);
+    arCtx.strokeStyle = 'rgba(26,95,175,' + a + ')';
+    arCtx.lineWidth = 2 - phase;
+    arCtx.stroke();
+  }
+  arCtx.restore();
+}
+
+function drawGroundGlow(x, y, t) {
+  arCtx.save();
+  const pulse = 0.5 + Math.sin(t / 600) * 0.15;
+  const grad = arCtx.createRadialGradient(x, y, 0, x, y, 100);
+  grad.addColorStop(0, 'rgba(26,95,175,' + (0.15 * pulse) + ')');
+  grad.addColorStop(1, 'rgba(26,95,175,0)');
+  arCtx.fillStyle = grad;
+  arCtx.fillRect(x - 100, y - 100, 200, 200);
+  arCtx.restore();
+}
+
+function drawDistanceCircle(x, y) {
+  arCtx.save();
+  arCtx.beginPath();
+  arCtx.arc(x, y, 85, 0, Math.PI * 2);
+  arCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+  arCtx.lineWidth = 1;
+  arCtx.setLineDash([5, 5]);
+  arCtx.stroke();
+  arCtx.setLineDash([]);
+  arCtx.restore();
+}
+
+function drawARDistanceLabel(x, y) {
+  arCtx.save();
+  arCtx.textAlign = 'center';
+  arCtx.textBaseline = 'middle';
+
+  const dist = distToDest > 0 ? (distToDest < 1000 ? Math.round(distToDest) + 'm' : (distToDest/1000).toFixed(1) + 'km') : '';
+
+  // Background pill
+  const tw = arCtx.measureText(dist).width + 24;
+  arCtx.fillStyle = 'rgba(0,40,85,0.65)';
+  arCtx.beginPath();
+  arCtx.roundRect(x - tw/2, y - 14, tw, 28, 14);
+  arCtx.fill();
+
+  // Gold border ring
+  arCtx.strokeStyle = 'rgba(255,215,0,0.55)';
+  arCtx.lineWidth = 1.5;
+  arCtx.stroke();
+
+  // Text
+  arCtx.fillStyle = '#fff';
+  arCtx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+  arCtx.fillText(dist, x, y + 1);
+
+  arCtx.restore();
+}
+
+/* ================================================================
+   SEARCH OVERLAY
+   ================================================================ */
+let searchQuery = '';
+
+function openSearch() {
+  document.getElementById('search-overlay').classList.remove('hidden');
+  const input = document.getElementById('search-input');
+  input.value = '';
+  input.focus();
+  renderSearchResults('');
+}
+
+function closeSearch() {
+  document.getElementById('search-overlay').classList.add('hidden');
+}
+
+function useMyLocation() {
+  dismissGpsGate();
+  startGPS();
+  const bar = document.getElementById('search-locate');
+  const txt = document.getElementById('search-locate-text');
+  if (bar) bar.classList.add('located');
+  if (txt) txt.textContent = gpsPos ? 'GPS active — results sorted nearest first' : 'Locating you now…';
+  showToast('Allow your location to sort results by distance');
+}
+
+function renderSearchResults(query) {
+  const container = document.getElementById('search-results');
+
+  // Reflect live GPS state on the locate bar.
+  const locateBar = document.getElementById('search-locate');
+  const locateTxt = document.getElementById('search-locate-text');
+  if (locateBar && locateTxt) {
+    if (gpsPos) {
+      locateBar.classList.add('located');
+      const acc = gpsPos.acc ? Math.round(gpsPos.acc) + 'm' : 'GPS';
+      locateTxt.textContent = 'GPS active (±' + acc + ') — results nearest first';
+    } else {
+      locateBar.classList.remove('located');
+      locateTxt.textContent = 'Use my location to sort by distance';
+    }
+  }
+
+  const q = query.toLowerCase().trim();
+  const entries = Object.entries(BUILDINGS);
+
+  let filtered;
+  if (!q) {
+    filtered = entries;
+  } else {
+    filtered = entries.filter(([key, b]) => {
+      return b.name.toLowerCase().includes(q) ||
+             key.includes(q) ||
+             b.loc.toLowerCase().includes(q) ||
+             (b.aliases && b.aliases.some(a => a.includes(q)));
+    });
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="search-empty"><div class="search-empty-icon">🔍</div>No buildings found for "' + query + '"</div>';
+    return;
+  }
+
+  // Sort by distance if GPS available
+  if (gpsPos) {
+    filtered.sort((a, b) => {
+      const da = haversine(gpsPos.lat, gpsPos.lng, a[1].lat, a[1].lng);
+      const db = haversine(gpsPos.lat, gpsPos.lng, b[1].lat, b[1].lng);
+      return da - db;
+    });
+  }
+
+  let html = '';
+  if (q) {
+    html += '<div class="search-section-label">Results (' + filtered.length + ')</div>';
+  } else {
+    html += '<div class="search-section-label">All Buildings (' + filtered.length + ')</div>';
+  }
+
+  filtered.forEach(([key, b]) => {
+    let distText = '';
+    if (gpsPos) {
+      const d = haversine(gpsPos.lat, gpsPos.lng, b.lat, b.lng);
+      distText = d < 1000 ? Math.round(d) + 'm' : (d/1000).toFixed(1) + 'km';
+    } else {
+      distText = b.dist;
+    }
+    html += '<div class="search-result" onclick="selectSearchResult(\'' + key + '\')">' +
+      '<div class="search-result-icon">' + b.icon + '</div>' +
+      '<div class="search-result-info">' +
+        '<div class="search-result-name">' + b.name + '</div>' +
+        '<div class="search-result-loc">' + b.loc + '</div>' +
+      '</div>' +
+      '<div class="search-result-dist">' + distText + '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+async function selectSearchResult(key) {
+  closeSearch();
+  // Ask for location BEFORE the camera inside this tap — the browser only
+  // allows one permission prompt per tap, so this is what actually makes the
+  // GPS prompt appear when the user picks a destination.
+  if (!gpsPos && navigator.geolocation) startGPS();
+  if (!streamReady() && !await initCamera()) return;
+  setDestination(key);
+  showToast('Navigating to ' + BUILDINGS[key].name);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('search-input').addEventListener('input', e => {
+    renderSearchResults(e.target.value);
+  });
+  initFeedbackUI();
+  flushPendingFeedback();
+  initSpeech();
+});
+function streamReady() {
+  return stream && stream.getVideoTracks && stream.getVideoTracks().length > 0;
+}
+/* ================================================================
+   UTILS
+   ================================================================ */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function calcBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function normalizeAngle(deg) {
+  return ((deg % 360) + 540) % 360 - 180;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+clearTimeout(showToast._timer);
+   showToast._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ================================================================
+   VOICE GUIDE — text-to-speech step announcements
+   ================================================================ */
+function speak(text) {
+  if (!voiceOn || !text) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.rate = 1.0;
+    u.pitch = 1.0;
+    if (voicesReady && speechSynthesis.getVoices) {
+      const v = speechSynthesis.getVoices().find(vo => /^en(-|_)/i.test(vo.lang))
+        || speechSynthesis.getVoices()[0];
+      if (v) u.voice = v;
+    }
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+function toggleVoice() {
+  voiceOn = !voiceOn;
+  if (!voiceOn) { try { speechSynthesis.cancel(); } catch (e) {} }
+  updateVoiceBtn();
+  showToast(voiceOn ? 'Voice guide on' : 'Voice guide off');
+  if (voiceOn) speak('Voice guide on');
+}
+
+function updateVoiceBtn() {
+  const btn = document.getElementById('voice-btn');
+  const ic = document.getElementById('voice-icon');
+  if (!btn || !ic) return;
+  btn.classList.toggle('off', !voiceOn);
+  ic.innerHTML = voiceOn
+    ? '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/>'
+    : '<path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+}
+
+function initSpeech() {
+  if (!('speechSynthesis' in window)) {
+    updateVoiceBtn();
+    return;
+  }
+  const load = () => { voicesReady = (speechSynthesis.getVoices() || []).length > 0; };
+  load();
+  speechSynthesis.addEventListener('voiceschanged', load);
+  updateVoiceBtn();
+}
+
+/* ================================================================
+   FEEDBACK — AR arrival rating sent to Supabase "feedbacks" table
+   Seen by the IMS Super Admin. Falls back to localStorage if
+   offline, then retries on next page load.
+   ================================================================ */
+const FEEDBACK_URL = 'https://kookpivlvxohyvzxhkex.supabase.co/rest/v1/feedbacks';
+const FEEDBACK_KEY = 'sb_publishable_9SUEcz-VR_p5QYuKto9-qA_iDL4EI3q';
+let selectedRating = 0;
+
+const FB_MAX = 300;
+const FB_LABELS = ['', 'Poor', 'Okay', 'It was good', 'Great!', 'Excellent! 🎉'];
+
+function initFeedbackUI() {
+  const stars = document.querySelectorAll('.fb-star');
+  stars.forEach(s => {
+    s.onclick = () => {
+      selectedRating = parseInt(s.dataset.star);
+      updateStars();
+      s.classList.remove('pop');
+      void s.offsetWidth; // restart animation
+      s.classList.add('pop');
+      if (navigator.vibrate) navigator.vibrate(20);
+    };
+    s.onmouseover = () => hoverStars(parseInt(s.dataset.star));
+    s.onmouseout = () => stars.forEach(x => x.classList.remove('hover'));
+  });
+
+  const msg = document.getElementById('fb-msg');
+  if (msg) {
+    msg.addEventListener('input', e => {
+      document.getElementById('fb-count').textContent = e.target.value.length + '/' + FB_MAX;
+    });
+  }
+  updateStars();
+}
+
+function hoverStars(n) {
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.classList.toggle('hover', parseInt(s.dataset.star) <= n);
+  });
+}
+
+function updateStars() {
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.classList.toggle('on', parseInt(s.dataset.star) <= selectedRating);
+  });
+  const label = document.getElementById('fb-label');
+  if (label) {
+    label.textContent = FB_LABELS[selectedRating] || 'How was the guidance?';
+    label.style.animation = 'none';
+    void label.offsetWidth;
+    label.style.animation = '';
+  }
+  const submitBtn = document.getElementById('fb-submit');
+  if (submitBtn) submitBtn.disabled = selectedRating === 0 || submitBtn.classList.contains('success');
+}
+
+function resetFeedbackUI() {
+  selectedRating = 0;
+  const question = document.getElementById('fb-question');
+  if (question) question.style.display = '';
+  const thanks = document.getElementById('fb-thanks');
+  if (thanks) thanks.style.display = 'none';
+  const msg = document.getElementById('fb-msg');
+  if (msg) { msg.value = ''; document.getElementById('fb-count').textContent = '0/' + FB_MAX; }
+  const submitBtn = document.getElementById('fb-submit');
+  if (submitBtn) {
+    submitBtn.classList.remove('loading', 'success');
+    submitBtn.disabled = true;
+  }
+  updateStars();
+}
+
+function skipFeedback() {
+  showFeedbackThanks();
+}
+
+function showFeedbackThanks() {
+  const question = document.getElementById('fb-question');
+  const thanks = document.getElementById('fb-thanks');
+  if (question) question.style.display = 'none';
+  if (thanks) { thanks.style.display = 'flex'; thanks.style.animation = 'none'; void thanks.offsetWidth; thanks.style.animation = ''; }
+}
+
+async function submitFeedback() {
+  const submitBtn = document.getElementById('fb-submit');
+  if (!selectedRating) {
+    const stars = document.getElementById('fb-stars');
+    stars.classList.remove('shake');
+    void stars.offsetWidth;
+    stars.classList.add('shake');
+    showToast('Tap a star rating first');
+    return;
+  }
+  if (submitBtn.classList.contains('loading')) return;
+  submitBtn.classList.add('loading');
+
+  const body = {
+    building_key: dest,
+    building_name: (BUILDINGS[dest] && BUILDINGS[dest].name) || dest,
+    rating: selectedRating,
+    message: (document.getElementById('fb-msg').value || '').trim() || null,
+    gps_lat: gpsPos ? gpsPos.lat : null,
+    gps_lng: gpsPos ? gpsPos.lng : null,
+    gps_acc: gpsPos ? gpsPos.acc : null,
+    device: navigator.userAgent
+  };
+
+  try {
+    const resp = await fetch(FEEDBACK_URL, {
+      method: 'POST',
+      headers: {
+        'apikey': FEEDBACK_KEY,
+        'Authorization': 'Bearer ' + FEEDBACK_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  } catch (e) {
+    console.warn('Feedback POST failed, saving locally for retry:', e);
+    try {
+      const pending = JSON.parse(localStorage.getItem('pendingFeedbacks') || '[]');
+      pending.push(body);
+      localStorage.setItem('pendingFeedbacks', JSON.stringify(pending));
+    } catch (_) {}
+  }
+  submitBtn.classList.remove('loading');
+  submitBtn.classList.add('success');
+  submitBtn.disabled = true;
+  setTimeout(showFeedbackThanks, 400);
+}
+
+async function flushPendingFeedback() {
+  let pending;
+  try {
+    pending = JSON.parse(localStorage.getItem('pendingFeedbacks') || '[]');
+  } catch (_) { return; }
+  if (!pending.length) return;
+  const left = [];
+  for (const body of pending) {
+    try {
+      const r = await fetch(FEEDBACK_URL, {
+        method: 'POST',
+        headers: {
+          'apikey': FEEDBACK_KEY,
+          'Authorization': 'Bearer ' + FEEDBACK_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) left.push(body);
+    } catch (_) { left.push(body); }
+  }
+  try { localStorage.setItem('pendingFeedbacks', JSON.stringify(left)); } catch (_) {}
+}
+
+/* ================================================================
+   CLEANUP
+   ================================================================ */
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (animFrame) cancelAnimationFrame(animFrame);
+  stopGPS();
+  stopCompass();
+});
+</script>
+</body>
+</html>
