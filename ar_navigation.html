@@ -712,13 +712,13 @@ let startDist = 0;        // GPS distance from first fix to destination (for ste
 // gate = legacy QR/gate route (unchanged)
 // current = live phone GPS -> destination
 // building = selected building -> destination
-let routeMode = 'gate';
+let routeMode = 'current';
+let pendingDestinationKey = null;
 let routeSourceKey = null;
 let activeRouteWaypoints = null;
 let activeRouteSteps = null;
 let activeRouteStart = null;
 let activeRouteGeometry = null;
-let pendingNavigationKey = null; // destination selected while waiting for first GPS fix
 let gpsPos = null;        // filtered navigation fix
 let rawGpsPos = null;     // latest browser GPS fix
 let routeMatchedPos = null;
@@ -1526,21 +1526,19 @@ function onGpsCoords(c) {
   dismissGpsGate();
   updateGpsDisplay();
 
-  // If the user chose a destination before the first GPS fix arrived,
-  // immediately start navigation now. This fixes the phone case where the
-  // camera opened but the arrow / guide never appeared.
-  if (pendingNavigationKey && !dest) {
-    const queuedKey = pendingNavigationKey;
-    pendingNavigationKey = null;
-    setDestination(queuedKey, {mode:'current', sourceKey:null});
-    showToast('Navigating to ' + BUILDINGS[queuedKey].name);
-  }
-
   if (!startDist && dest) {
     startDist = Math.hypot(gpsPos.local.x - BUILDINGS[dest].local.x, gpsPos.local.y - BUILDINGS[dest].local.y);
   }
 
   if (dest) updateDistanceAndBearing();
+
+  // If a destination was selected before GPS was ready, start it now.
+  if (!dest && pendingDestinationKey && BUILDINGS[pendingDestinationKey]) {
+    const key = pendingDestinationKey;
+    pendingDestinationKey = null;
+    setDestination(key, {mode:'current', sourceKey:null});
+    showToast('Navigating from your current campus location to ' + BUILDINGS[key].name);
+  }
 
   const searchOverlay = document.getElementById('search-overlay');
   if (searchOverlay && !searchOverlay.classList.contains('hidden')) {
@@ -1997,6 +1995,7 @@ function setDestination(key, options = {}) {
 function setDestinationUI(key) {
   const b = BUILDINGS[key];
   if (!b) return;
+  closeSearch();
  
   document.getElementById('topbar-badge').textContent = 'Navigating';
   document.getElementById('topbar-badge').classList.add('active');
@@ -2511,15 +2510,21 @@ async function selectSearchResult(key) {
     return;
   }
   if (routeMode === 'current' && !gpsPos) {
-    // Keep the selected destination instead of reopening Search. The first
-    // successful GPS fix below will automatically start this navigation.
-    pendingNavigationKey = key;
-    showToast('Destination selected — getting your GPS position…');
+    // Remember the selected building and automatically start as soon as the
+    // first usable GPS fix arrives. Do not throw the user back to search.
+    pendingDestinationKey = key;
+    closeSearch();
+    const b = BUILDINGS[key];
+    const badge = document.getElementById('topbar-badge');
+    if (badge) { badge.textContent = 'Getting GPS'; badge.classList.add('active'); }
+    const title = document.getElementById('topbar-title');
+    if (title) title.textContent = b.name;
+    showToast('Getting your location… navigation will start automatically.');
     startGPS();
     return;
   }
 
-  pendingNavigationKey = null;
+  pendingDestinationKey = null;
   setDestination(key, {mode: routeMode, sourceKey: routeSourceKey});
   showToast('Navigating to ' + BUILDINGS[key].name);
 }
@@ -2819,8 +2824,8 @@ window.addEventListener('beforeunload', () => {
     const distance=document.getElementById('dom-ar-distance');
     const guide=document.getElementById('dom-ar-guide');
     if(!hud||!arrow||!distance||!guide)return;
-    const waiting=!!pendingNavigationKey&&!dest;
     const navigating=!!dest&&!arrived;
+    const waiting=!!pendingDestinationKey&&!dest;
     hud.style.display=(navigating||waiting)?'block':'none';
     if(waiting){
       arrow.style.transform='rotate(0deg)';
