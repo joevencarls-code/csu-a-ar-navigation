@@ -2788,6 +2788,42 @@ window.addEventListener('beforeunload', () => {
   stopGPS();
 });
 </script>
+
+<!-- Reliable DOM AR HUD fallback: remains visible even if canvas rendering is interrupted -->
+<div id="dom-ar-hud" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;pointer-events:none;text-align:center;filter:drop-shadow(0 5px 10px rgba(0,0,0,.55));">
+  <div id="dom-ar-arrow" style="width:0;height:0;border-left:42px solid transparent;border-right:42px solid transparent;border-bottom:92px solid #ffcf1f;transform-origin:50% 58%;margin:0 auto 12px;transition:transform .18s linear;filter:drop-shadow(0 0 2px #00224a) drop-shadow(0 0 5px #00224a);"></div>
+  <div style="background:rgba(0,34,74,.94);border:2px solid #ffcf1f;border-radius:16px;padding:8px 18px;min-width:145px;color:white;font-family:system-ui,sans-serif;">
+    <div id="dom-ar-distance" style="font-size:24px;font-weight:800;line-height:1.05;">-- m</div>
+    <div id="dom-ar-guide" style="font-size:13px;margin-top:4px;">Waiting for GPS…</div>
+  </div>
+</div>
+<script>
+(function(){
+  function updateDomArHud(){
+    const hud=document.getElementById('dom-ar-hud');
+    const arrow=document.getElementById('dom-ar-arrow');
+    const distance=document.getElementById('dom-ar-distance');
+    const guide=document.getElementById('dom-ar-guide');
+    if(!hud||!arrow||!distance||!guide)return;
+    const navigating=!!dest&&!arrived;
+    hud.style.display=navigating?'block':'none';
+    if(!navigating)return;
+    const deg=Number.isFinite(currentArrowRot)?currentArrowRot*180/Math.PI:0;
+    arrow.style.transform='rotate('+deg+'deg)';
+    distance.textContent=Number.isFinite(distToTarget)?fmtDist(distToTarget):'Waiting for GPS…';
+    const t=targetForStep();
+    guide.textContent=(t&&t.label)?t.label:(gpsPos?'Continue toward '+(BUILDINGS[dest]?.name||'destination'):'Waiting for GPS…');
+  }
+  const oldRenderLoop=renderLoop;
+  renderLoop=function(ts=0){updateDomArHud();return oldRenderLoop(ts);};
+  const oldSetDestination=setDestination;
+  setDestination=function(key,options={}){const r=oldSetDestination(key,options);updateDomArHud();return r;};
+  const oldStopNav=typeof stopNavigation==='function'?stopNavigation:null;
+  if(oldStopNav){stopNavigation=function(){const r=oldStopNav.apply(this,arguments);updateDomArHud();return r;};}
+  setInterval(updateDomArHud,250);
+})();
+</script>
+
 </body>
 </html>
  
