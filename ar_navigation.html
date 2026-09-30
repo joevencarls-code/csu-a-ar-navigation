@@ -718,6 +718,7 @@ let activeRouteWaypoints = null;
 let activeRouteSteps = null;
 let activeRouteStart = null;
 let activeRouteGeometry = null;
+let pendingNavigationKey = null; // destination selected while waiting for first GPS fix
 let gpsPos = null;        // filtered navigation fix
 let rawGpsPos = null;     // latest browser GPS fix
 let routeMatchedPos = null;
@@ -1524,6 +1525,16 @@ function onGpsCoords(c) {
 
   dismissGpsGate();
   updateGpsDisplay();
+
+  // If the user chose a destination before the first GPS fix arrived,
+  // immediately start navigation now. This fixes the phone case where the
+  // camera opened but the arrow / guide never appeared.
+  if (pendingNavigationKey && !dest) {
+    const queuedKey = pendingNavigationKey;
+    pendingNavigationKey = null;
+    setDestination(queuedKey, {mode:'current', sourceKey:null});
+    showToast('Navigating to ' + BUILDINGS[queuedKey].name);
+  }
 
   if (!startDist && dest) {
     startDist = Math.hypot(gpsPos.local.x - BUILDINGS[dest].local.x, gpsPos.local.y - BUILDINGS[dest].local.y);
@@ -2500,12 +2511,15 @@ async function selectSearchResult(key) {
     return;
   }
   if (routeMode === 'current' && !gpsPos) {
-    showToast('Waiting for your GPS position…');
+    // Keep the selected destination instead of reopening Search. The first
+    // successful GPS fix below will automatically start this navigation.
+    pendingNavigationKey = key;
+    showToast('Destination selected — getting your GPS position…');
     startGPS();
-    openSearch();
     return;
   }
 
+  pendingNavigationKey = null;
   setDestination(key, {mode: routeMode, sourceKey: routeSourceKey});
   showToast('Navigating to ' + BUILDINGS[key].name);
 }
@@ -2790,7 +2804,7 @@ window.addEventListener('beforeunload', () => {
 </script>
 
 <!-- Reliable DOM AR HUD fallback: remains visible even if canvas rendering is interrupted -->
-<div id="dom-ar-hud" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;pointer-events:none;text-align:center;filter:drop-shadow(0 5px 10px rgba(0,0,0,.55));">
+<div id="dom-ar-hud" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:35;pointer-events:none;text-align:center;filter:drop-shadow(0 5px 10px rgba(0,0,0,.55));">
   <div id="dom-ar-arrow" style="width:0;height:0;border-left:42px solid transparent;border-right:42px solid transparent;border-bottom:92px solid #ffcf1f;transform-origin:50% 58%;margin:0 auto 12px;transition:transform .18s linear;filter:drop-shadow(0 0 2px #00224a) drop-shadow(0 0 5px #00224a);"></div>
   <div style="background:rgba(0,34,74,.94);border:2px solid #ffcf1f;border-radius:16px;padding:8px 18px;min-width:145px;color:white;font-family:system-ui,sans-serif;">
     <div id="dom-ar-distance" style="font-size:24px;font-weight:800;line-height:1.05;">-- m</div>
@@ -2805,8 +2819,15 @@ window.addEventListener('beforeunload', () => {
     const distance=document.getElementById('dom-ar-distance');
     const guide=document.getElementById('dom-ar-guide');
     if(!hud||!arrow||!distance||!guide)return;
+    const waiting=!!pendingNavigationKey&&!dest;
     const navigating=!!dest&&!arrived;
-    hud.style.display=navigating?'block':'none';
+    hud.style.display=(navigating||waiting)?'block':'none';
+    if(waiting){
+      arrow.style.transform='rotate(0deg)';
+      distance.textContent='GPS…';
+      guide.textContent='Getting your location…';
+      return;
+    }
     if(!navigating)return;
     const deg=Number.isFinite(currentArrowRot)?currentArrowRot*180/Math.PI:0;
     arrow.style.transform='rotate('+deg+'deg)';
