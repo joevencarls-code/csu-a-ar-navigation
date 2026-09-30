@@ -38,9 +38,6 @@ migrate_working_dir/
 
 # Local tooling state
 .claude/
-.vscode/
-supabase/.temp/
---project-ref
 
 # Separate git repo for the deployed AR site (tracked independently)
 /ar-site/
